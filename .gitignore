@@ -1,0 +1,33 @@
+# Dependências
+node_modules/
+
+# Ambiente — nunca versionar segredos (.env.example é versionado)
+.env
+.env.*
+!.env.example
+
+# Banco local de desenvolvimento/teste (cluster próprio na porta 5433)
+.local/
+
+# Armazenamento local (provider "local", só desenvolvimento)
+.storage/
+
+# Saída de e-mails do provider "log"
+.outbox/
+
+# Artefatos gerados no build do frontend
+frontend/public/assets/app.css
+frontend/public/assets/icons.svg
+
+# Testes
+coverage/
+e2e/test-results/
+e2e/playwright-report/
+e2e/blob-report/
+
+# Sistema / editores
+.DS_Store
+Thumbs.db
+*.log
+.vscode/
+.idea/
