@@ -70,7 +70,9 @@ backend/
   seeds/                   permissões, papéis, features, planos (idempotentes) · dev/ (demo)
   tests/                   unit/ · integration/ · security/ · concurrency/ · static/ · fixtures/
 frontend/
-  public/                  index.html (versão carimbada), boot.js, manifest, ícones, sw.js, vendor/
+  public/                  index.html (versão carimbada), favicon, assets/ (CSS e sprite gerados no build),
+                           manifest, ícones e sw.js (F5), vendor/ (Chart.js, quando houver gráfico)
+  scripts/                 build-icons.js (sprite Lucide), check-imports.js (grafia exata dos imports)
   src/                     app.js, router.js, guards.js
   src/services/            api (refresh + Web Locks), session, currentCompany, permissions, upload
   src/components/          DataTable, Modal, Drawer, Toast, ConfirmDialog, Form, MoneyInput,
@@ -205,6 +207,15 @@ Pacote do Wash (pág. 04, ADR-007), aplicado integralmente.
 | Verificação de e-mail | Token de 7 dias; obrigatória para a empresa sair de `pending` |
 | Links | Base `APP_URL`, nunca o header `Host`; o token sai da barra de endereço assim que a tela abre |
 | Sessões | "Sair" revoga a família atual; "Sair de todos os dispositivos" revoga todas; lista de sessões ativas na F10 |
+
+### 7.1 Como ficou na implementação (F1)
+
+- **Cadastro:** sempre `202` com a mesma resposta. O bcrypt roda antes da consulta, para o tempo não revelar se o e-mail existe. Para e-mail novo, cria a conta e envia o link de verificação; para e-mail já cadastrado, não muda nada e avisa o dono do e-mail.
+- **Login antes da verificação:** permitido. A verificação é exigida para ativar a empresa (F2). Se alguém cadastrar o e-mail de outra pessoa, o dono legítimo recupera a conta por "Esqueci minha senha": o reset prova o controle da caixa, troca a senha, derruba as sessões e marca o e-mail como verificado.
+- **Corrida entre abas:** um refresh rotacionado há até 15 s devolve **só** um access token novo, sem cookie (a outra aba já recebeu o cookie novo). Depois de 15 s, é reuso: a família inteira é revogada e o usuário recebe um e-mail de alerta.
+- **Revogação de access tokens:** `users.sessions_revoked_at`. Tokens com `iat` anterior ao segundo da revogação são recusados (logout geral, reset e troca de senha). O instante é gravado pelo relógio da aplicação, o mesmo que assina o `iat`.
+- **Cookie:** `zn_rt` em http (desenvolvimento) e `__Secure-zn_rt` em https; `HttpOnly; SameSite=Strict; Path=/api/v1/auth`.
+- **Comparações de validade dos tokens** usam o relógio do banco (`now()`) num único lugar: o repository.
 | Entrada de clientes | Cadastro público → onboarding → empresa `pending` → Platform Admin aprova (D3) |
 
 ## 8. Autorização (RBAC)

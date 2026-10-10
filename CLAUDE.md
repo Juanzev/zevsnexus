@@ -38,29 +38,40 @@
 
 API em `/api/v1`. Fora da versão: `/health`, `/ready`, `/api/version`.
 
-## Como rodar local (preenchido na F1)
+## Como rodar local
+
+Detalhes em `docs/DEPLOYMENT.md`.
 
 ```bash
-# planejado — os scripts nascem na F1
-npm ci                      # em backend/ e frontend/
-npm run db:test:setup       # cria o banco local *_test
-npm run migrate             # node-pg-migrate up
-npm run seed                # permissões, papéis, features, planos (idempotente)
-npm run seed:dev            # dados de demonstração
-npm run dev                 # API + SPA
+# backend/
+npm ci
+npm run db:local -- setup   # cluster PostgreSQL próprio na porta 5434 + bancos dev/test/e2e
+npm run migrate             # node-pg-migrate up (também: migrate:down [-- n|all], migrate:redo, migrate:status)
+npm run dev                 # API + SPA em http://localhost:3000
 npm run lint
-npm test                    # unit + integration + security
-npm run test:e2e            # Playwright
-npm run build               # CSS + sprite + checagem de imports
-npm run prod:rehearsal      # ensaio de produção local
+npm test                    # unit + integração + segurança + concorrência + guardas estáticas
+npm run audit               # dependências de produção
+
+# frontend/
+npm ci
+npm run build               # Tailwind + sprite Lucide + checagem de imports (grafia exata)
+npm run lint
+npm test
+
+# e2e/ (exige frontend construído e o banco local no ar)
+npx playwright test
 ```
+
+Ainda não existem: `seed` (F2, com permissões, papéis e planos) e `prod:rehearsal` (F5).
 
 ## Estrutura
 
 ```plain text
 backend/src/{app.js, server.js, config/, shared/, middlewares/, modules/<módulo>/, jobs/}
 backend/{migrations/, seeds/, tests/}
-frontend/public/        index.html (versão carimbada), boot.js, manifest, sw.js, vendor/
+backend/scripts/        local-db.js (cluster 5434), migrate.js, e2e-server.js
+frontend/public/        index.html (versão carimbada), favicon, assets/ (gerado no build)
+frontend/scripts/       build-icons.js, check-imports.js
 frontend/src/           app.js, router.js, guards.js, services/, components/, layouts/, views/
 e2e/                    Playwright
 docs/                   ARCHITECTURE, DATABASE, SECURITY, API, DEPLOYMENT, FASE-0, adr/
@@ -171,3 +182,9 @@ Responder por escrito em `docs/SECURITY.md` antes do merge:
 - No Tailwind v4, não criar `@utility` própria com `backdrop-filter`: o minificador perde a versão sem prefixo.
 - Sem o carimbo de versão no HTML, o banner de atualização nunca dispara.
 - O Cloudflare esconde o corpo de 5xx: para diagnosticar, acessar a origem `*.onrender.com`.
+
+## Lições deste projeto
+
+- A porta 5433 já é usada pelo cluster de teste de outro projeto ZEVS nesta máquina: **não mexer nele**. O Nexus usa a 5434.
+- No Windows, o PostgreSQL iniciado por um console que depois fecha derruba os novos backends com `0xC0000142`. O `db:local -- start` inicia destacado.
+- Vulnerabilidade transitiva sem correção em ferramenta de desenvolvimento: registrar em `docs/SECURITY.md` (riscos aceitos). Se houver versão corrigida do pacote intermediário, usar `overrides` (ex.: `@parcel/watcher` do Tailwind).
