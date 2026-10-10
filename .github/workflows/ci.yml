@@ -1,0 +1,125 @@
+# CI do ZEVS Nexus (pág. 17 e 20): lint → unit → integração → segurança → build, migrations
+# provadas em up → down → up, auditoria de dependências e E2E dos fluxos críticos.
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  backend:
+    name: Backend (Node ${{ matrix.node }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        node: [20, 24]
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: zevs_nexus_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      DATABASE_URL: postgres://postgres:postgres@localhost:5432/zevs_nexus_test
+      TEST_DATABASE_URL: postgres://postgres:postgres@localhost:5432/zevs_nexus_test
+    defaults:
+      run:
+        working-directory: backend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: ${{ matrix.node }}
+          cache: npm
+          cache-dependency-path: backend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - name: Migrations up → down → up (reversibilidade)
+        run: |
+          npm run migrate
+          npm run migrate:down -- all
+          npm run migrate
+      - run: npm test
+      - name: Auditoria das dependências de produção
+        run: npm run audit
+
+  frontend:
+    name: Frontend
+    runs-on: ubuntu-latest
+    defaults:
+      run:
+        working-directory: frontend
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+          cache-dependency-path: frontend/package-lock.json
+      - run: npm ci
+      - run: npm run lint
+      - name: Build (CSS, sprite de ícones e checagem de imports)
+        run: npm run build
+      - run: npm test
+      - name: Auditoria das dependências
+        run: npm audit --audit-level=high
+
+  e2e:
+    name: E2E (Playwright)
+    needs: [backend, frontend]
+    runs-on: ubuntu-latest
+    services:
+      postgres:
+        image: postgres:17
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: zevs_nexus_e2e_test
+        ports: ['5432:5432']
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    env:
+      E2E_DATABASE_URL: postgres://postgres:postgres@localhost:5432/zevs_nexus_e2e_test
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - name: Dependências do backend (só produção)
+        run: npm ci --omit=dev
+        working-directory: backend
+      - name: Build do frontend
+        run: npm ci && npm run build
+        working-directory: frontend
+      - name: Playwright
+        run: npm ci && npx playwright install --with-deps chromium
+        working-directory: e2e
+      - run: npx playwright test
+        working-directory: e2e
+      - uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: |
+            e2e/playwright-report
+            e2e/test-results
+          retention-days: 7
