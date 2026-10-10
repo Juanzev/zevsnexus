@@ -1,0 +1,30 @@
+{
+  "name": "zevs-nexus-frontend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ZEVS Nexus — SPA (HTML + ES Modules, sem framework e sem bundler)",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "build": "npm run build:icons && npm run build:css && npm run check:imports",
+    "build:css": "tailwindcss -i src/styles/app.css -o public/assets/app.css --minify",
+    "build:icons": "node scripts/build-icons.js",
+    "check:imports": "node scripts/check-imports.js",
+    "watch:css": "tailwindcss -i src/styles/app.css -o public/assets/app.css --watch",
+    "lint": "eslint .",
+    "test": "node --test tests/"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "@tailwindcss/cli": "^4.3.3",
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0",
+    "lucide-static": "^1.54.0",
+    "tailwindcss": "^4.3.3"
+  },
+  "overrides": {
+    "@parcel/watcher": "^2.6.0"
+  }
+}
