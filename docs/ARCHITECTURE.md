@@ -189,6 +189,28 @@ Core integral da pág. 03 e dos ADRs 002 a 005.
 - **CNPJ não é único na plataforma.** Exigir unicidade revelaria a outro tenant que aquele CNPJ já está cadastrado (enumeração). Duplicidade é assunto do Painel ZEVS.
 - **Onboarding** numa transação: empresa (`pending`) + settings + branding + membership owner + assinatura (plano padrão) + defaults (pastas sugeridas, tipos de documento, categorias), todos como dados editáveis.
 
+### 6.1 Como fica na implementação (F2)
+
+- **Onboarding:**
+  - exige e-mail **verificado** (`403 EMAIL_NOT_VERIFIED`): a verificação é o que ativa a empresa (D3) e impede alguém de criar empresa com e-mail alheio;
+  - cada pessoa tem no máximo **uma empresa `pending`** por vez (`409 PENDING_COMPANY_EXISTS`);
+  - `Idempotency-Key` obrigatório: duplo clique ou retry não cria duas empresas;
+  - os defaults de cada módulo (pastas, tipos, categorias) entram na fase do módulo, por um registro de ganchos de onboarding.
+- **`X-Company-Id`:** ausente → `400 COMPANY_REQUIRED`. Inválido, inexistente, de outro tenant ou sem vínculo → `404 COMPANY_NOT_FOUND`, sempre a mesma resposta.
+- **Contexto da sessão no front:**
+  - `GET /api/v1/me` lista as empresas do usuário (status e papéis) e diz se ele é Platform Admin;
+  - `GET /api/v1/company/context` (qualquer membro ativo) devolve permissões, features e marca da empresa atual, para a SPA esconder o que não se aplica.
+- **`withTenant` em toda consulta de tenant, inclusive leitura.** Assim, ligar o RLS na F10 é só criar as policies: nenhuma consulta escapa do `app.company_id`.
+- **Fora do `tenantRouter`** (allowlist da guarda estática):
+  - `auth.routes.js` (público e conta);
+  - `onboarding.routes.js` (a empresa ainda não existe);
+  - `platform.routes.js` (Painel ZEVS, `requirePlatformAdmin` + `withSystem`).
+- **Tabelas adiadas** para quando tiverem uso:
+  - `company_settings` nasce na 0009 (F3), com as pastas padrão;
+  - `invitations` nasce com a equipe (F10).
+
+  Fuso e cor da marca já existem: `companies.timezone` e `company_branding`.
+
 ## 7. Autenticação e sessão
 
 Pacote do Wash (pág. 04, ADR-007), aplicado integralmente.
@@ -254,14 +276,14 @@ Catálogo e matriz de papéis: ver FASE-0, D10.
 ```plain text
 0001_extensions      pgcrypto, citext, pg_trgm, unaccent + f_unaccent(); triggers set_updated_at e prevent_mutation
 0002_users_auth      users, refresh_tokens, password_reset_tokens, email_verification_tokens
-0003_companies       companies, company_settings, company_branding, company_contacts, company_usage
-0004_memberships     memberships, invitations
+0003_companies       companies, company_branding, company_contacts, company_usage
+0004_memberships     memberships (invitations entra na F10)
 0005_rbac            roles, permissions, role_permissions, membership_roles, membership_permissions
 0006_audit           audit_logs (+ prevent_mutation)
 0007_platform        platform_admins, plans, features, plan_features, subscriptions, company_features
 0008_idempotency     idempotency_keys
 0009_documents       files, folders, document_types, documents, document_versions, tags, document_tags,
-                     document_favorites; company_settings ganha as pastas padrão
+                     document_favorites; company_settings (nasce com as pastas padrão)
 0010_parties         parties, party_documents
 0011_finance         finance_categories, expenses, expense_payments, expense_documents
 0012_spreadsheets    spreadsheets
@@ -306,7 +328,7 @@ Todas têm `id`, `company_id`, `created_at`, `updated_at` e, onde fizer sentido,
 | Tabela | Colunas principais | Restrições e índices |
 |---|---|---|
 | `companies` | `legal_name`, `trade_name`, `cnpj`, `status` (`pending`/`active`/`suspended`), `timezone`, `state_registration`, `municipal_registration`, `tax_regime`, endereço (`cep`, `street`, `number`, `complement`, `district`, `city`, `state`), `email`, `phone` | `timezone` validado contra a lista IANA |
-| `company_settings` | `upcoming_window_days` (7), `invoice_pending_alert_days`, pastas padrão (`company_folder_id`, `receipts_folder_id`, `invoices_folder_id`, `spreadsheets_folder_id`) | Pastas padrão com FK composta; `null` = raiz |
+| `company_settings` (0009, F3) | Pastas padrão (`company_folder_id`, `receipts_folder_id`, `invoices_folder_id`, `spreadsheets_folder_id`); depois `upcoming_window_days` (F4) e `invoice_pending_alert_days` (F7). Cada coluna entra com o módulo que a usa | Pastas padrão com FK composta; `null` = raiz |
 | `company_branding` | `primary_color` | `#RRGGBB` (Zod + `CHECK`) |
 | `company_contacts` | `name`, `role_title`, `email`, `phone`, `is_responsible`, `notes` | — |
 | `company_usage` | `storage_bytes`, `file_count` | `check (storage_bytes >= 0)` |
@@ -328,7 +350,7 @@ Todas têm `id`, `company_id`, `created_at`, `updated_at` e, onde fizer sentido,
 | `import_rows` | `import_job_id`, `row_number`, `raw` (limitado), `normalized`, `status` (`valid`/`invalid`/`duplicate`/`excluded`/`imported`), `errors`, `created_entity_id` | PK `(company_id, import_job_id, row_number)`; removidas 90 dias após a conclusão (o resumo do job fica) |
 | `invoices` | `direction` (`issued`/`received`), `kind` (`nfse`/`nfe`/`other`), `number`, `series`, `issue_date`, `competence_date`, `customer_party_id`, `description`, `gross_amount_cents`, `withheld_amount_cents`, `net_amount_cents` (gerada), `due_date`, `status` (`processing`/`issued`/`cancelled`), `payment_status` (`pending`/`paid`), `paid_on`, `received_amount_cents`, `verification_code`, `archived_at`, `notes`, `search_text` | `withheld <= gross`; `issued` exige `number` e `issue_date`; `paid` exige `status = issued`; único `(company_id, direction, kind, coalesce(series,''), number)` entre ativas com número |
 | `invoice_documents` | `invoice_id`, `document_id`, `role` (`pdf`/`xml`/`receipt`/`other`) | PK composta |
-| `idempotency_keys` | `scope`, `key`, `request_hash`, `status`, `response_status`, `response_body`, `expires_at` | `unique (company_id, scope, key)` |
+| `idempotency_keys` | `user_id`, `company_id` (nulo no onboarding), `scope` (empresa + método + caminho real), `key`, `request_hash`, `status`, `response_status`, `response_body`, `expires_at` (24 h) | `unique (user_id, scope, key)` |
 | `audit_logs` | `company_id` (nulo em eventos só do usuário, como login), `actor_type` (`user`/`platform_admin`/`system`), `actor_user_id`, `action`, `entity_type`, `entity_id`, `request_id`, `ip`, `user_agent`, `metadata` | Append-only por trigger; índices `(company_id, created_at desc)` e `(company_id, entity_type, entity_id)` |
 
 ## 10. Armazenamento
@@ -500,7 +522,7 @@ StorageProvider
 | Área | Endpoints |
 |---|---|
 | Auth | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/logout-all`, `/auth/password/forgot`, `/auth/password/reset`, `/auth/password/change`, `/auth/email/verify`, `/auth/email/resend` · `GET /me` (usuário, empresas, permissões e features da empresa atual) |
-| Empresa | `POST /companies` (onboarding) · `GET`/`PATCH /company` · CRUD `/company/contacts` · `GET`/`PATCH /company/settings` |
+| Empresa | `POST /companies` (onboarding) · `GET /company/context` · `GET`/`PATCH /company` · CRUD `/company/contacts` · `GET`/`PATCH /company/settings` (fuso e cor da marca) |
 | Configurações | CRUD `/finance-categories`, `/document-types`, `/tags` |
 | Arquivos | `POST /files/upload-intents` · `POST /files/:id/confirm` |
 | Documentos | CRUD `/folders` + `POST /folders/:id/move` · CRUD `/documents` + `POST /documents/:id/versions`, `/documents/:id/versions/:n/restore`, `/documents/:id/download-url`, `/documents/:id/move`, `/documents/:id/archive`, `/documents/:id/unarchive`, `/documents/:id/favorite` (+ `DELETE`) · `GET /documents/:id/history` · `GET /trash` + `POST /trash/:id/restore` |
