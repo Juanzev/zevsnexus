@@ -1,0 +1,46 @@
+{
+  "name": "zevs-nexus-backend",
+  "version": "0.1.0",
+  "private": true,
+  "description": "ZEVS Nexus — API e servidor da SPA",
+  "type": "module",
+  "engines": {
+    "node": ">=20.11"
+  },
+  "scripts": {
+    "start": "node src/server.js",
+    "dev": "node --watch src/server.js",
+    "db:local": "node scripts/local-db.js",
+    "migrate": "node scripts/migrate.js up",
+    "migrate:down": "node scripts/migrate.js down",
+    "migrate:redo": "node scripts/migrate.js redo",
+    "migrate:status": "node scripts/migrate.js status",
+    "lint": "eslint .",
+    "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
+    "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand tests/unit",
+    "test:integration": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand tests/integration",
+    "test:security": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand tests/security tests/static tests/concurrency",
+    "audit": "npm audit --omit=dev --audit-level=high"
+  },
+  "dependencies": {
+    "bcryptjs": "^3.0.3",
+    "cookie-parser": "^1.4.7",
+    "cors": "^2.8.6",
+    "express": "^5.3.0",
+    "express-rate-limit": "^8.7.1",
+    "helmet": "^8.3.0",
+    "jsonwebtoken": "^9.0.3",
+    "node-pg-migrate": "^9.0.0",
+    "pg": "^8.23.1",
+    "pino": "^10.4.0",
+    "pino-http": "^11.0.0",
+    "zod": "^4.6.5"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.39.5",
+    "eslint": "^9.39.5",
+    "globals": "^17.13.0",
+    "jest": "^30.5.2",
+    "supertest": "^7.3.1"
+  }
+}
