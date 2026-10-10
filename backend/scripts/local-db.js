@@ -59,12 +59,17 @@ function init() {
 
 async function isUp() {
   const client = new pg.Client({ host: 'localhost', port: Number(port), user: 'postgres', database: 'postgres' });
+  // Enquanto o servidor sobe ("starting up"), a conexão pode cair depois de aberta: o evento
+  // 'error' sem ouvinte derrubaria o script.
+  client.on('error', () => {});
   try {
     await client.connect();
-    await client.end();
+    await client.query('SELECT 1');
     return true;
   } catch {
     return false;
+  } finally {
+    await client.end().catch(() => {});
   }
 }
 
@@ -73,14 +78,20 @@ async function start() {
     console.log(`PostgreSQL local já está rodando em localhost:${port}`);
     return;
   }
-  // Processo destacado: no Windows, se o console que iniciou o postmaster fechar, os novos
-  // backends morrem com 0xC0000142. A saída do servidor vai para o arquivo de log.
-  const child = spawn(
-    bin('pg_ctl'),
-    ['-D', dataDir, '-l', logFile, '-o', `-p ${port} -c listen_addresses=localhost`, 'start'],
-    { detached: true, stdio: 'ignore', windowsHide: true },
-  );
-  child.unref();
+  const args = ['-D', dataDir, '-l', logFile, '-o', `-p ${port} -c listen_addresses=localhost`, 'start'];
+  if (process.platform === 'win32') {
+    // No Windows o postmaster precisa de um console próprio que sobreviva ao terminal que o iniciou:
+    // se o console fecha, os processos do servidor morrem (0xC0000142 / 0xC000013A).
+    // Start-Process com janela oculta cria esse console. Argumentos com espaço vão entre aspas duplas.
+    const argumentList = args
+      .map((arg) => (/\s/.test(arg) ? `"${arg}"` : arg))
+      .map((arg) => `'${arg.replace(/'/g, "''")}'`)
+      .join(',');
+    const command = `Start-Process -FilePath '${bin('pg_ctl')}' -ArgumentList ${argumentList} -WindowStyle Hidden`;
+    spawnSync('powershell.exe', ['-NoProfile', '-NonInteractive', '-Command', command], { stdio: 'ignore' });
+  } else {
+    spawn(bin('pg_ctl'), args, { detached: true, stdio: 'ignore' }).unref();
+  }
   const deadline = Date.now() + 30_000;
   while (Date.now() < deadline) {
     if (await isUp()) {
