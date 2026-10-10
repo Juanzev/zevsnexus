@@ -191,5 +191,20 @@ export function authRepository(db = pool) {
     async markVerificationTokenUsed(tokenId) {
       await db.query('UPDATE email_verification_tokens SET used_at = now() WHERE id = $1', [tokenId]);
     },
+
+    // ---------- limpeza (job) ----------
+    /** Apaga tokens vencidos há mais de um dia. Devolve quantos de cada tipo. */
+    async deleteExpiredTokens() {
+      const refresh = await db.query(
+        "DELETE FROM refresh_tokens WHERE family_expires_at < now() - interval '1 day'",
+      );
+      const reset = await db.query(
+        "DELETE FROM password_reset_tokens WHERE expires_at < now() - interval '1 day'",
+      );
+      const verification = await db.query(
+        "DELETE FROM email_verification_tokens WHERE expires_at < now() - interval '1 day'",
+      );
+      return { refresh: refresh.rowCount, reset: reset.rowCount, verification: verification.rowCount };
+    },
   };
 }

@@ -11,6 +11,9 @@ import { apiNotFound, errorHandler } from './middlewares/error-handler.js';
 import { httpLogger } from './middlewares/http-logger.js';
 import { requestId } from './middlewares/request-id.js';
 import { createAuthRouter, createMeRouter } from './modules/auth/auth.routes.js';
+import { createCompanyRouter } from './modules/companies/companies.routes.js';
+import { createOnboardingRouter } from './modules/companies/onboarding.routes.js';
+import { createPlatformRouter } from './modules/platform/platform.routes.js';
 import { createClientIpResolver } from './shared/security/client-ip.js';
 import { createCsrfGuard } from './shared/security/csrf.js';
 import { createRateLimiters } from './shared/security/rate-limits.js';
@@ -71,6 +74,9 @@ export function createApp({ rateLimits = !env.isTest, serveFrontend = env.SERVE_
   app.get('/api/version', version);
   app.use('/api/v1/auth', createAuthRouter({ limiters, csrfGuard }));
   app.use('/api/v1/me', createMeRouter());
+  app.use('/api/v1/companies', createOnboardingRouter());
+  app.use('/api/v1/company', createCompanyRouter());
+  app.use('/api/v1/admin', createPlatformRouter());
   app.use('/api', apiNotFound);
 
   if (serveFrontend) app.use(createSpaRouter());

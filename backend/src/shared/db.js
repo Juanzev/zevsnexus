@@ -48,6 +48,37 @@ export async function withTransaction(fn) {
   }
 }
 
+const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+
+export function isUuid(value) {
+  return typeof value === 'string' && UUID.test(value);
+}
+
+/** Marca a transação corrente com a empresa (base do RLS, ligado na F10 — D2). */
+export async function setTenant(client, companyId) {
+  if (!isUuid(companyId)) throw new Error('setTenant: companyId inválido');
+  await client.query("SELECT set_config('app.company_id', $1, true)", [companyId]);
+}
+
+/**
+ * Toda operação de dados de empresa — inclusive leitura — roda aqui: transação em client dedicado
+ * com `app.company_id` definido. Assim, ligar o RLS vira só criar as policies.
+ */
+export function withTenant(companyId, fn) {
+  return withTransaction(async (client) => {
+    await setTenant(client, companyId);
+    return fn(client);
+  });
+}
+
+/** Operações de plataforma, jobs e onboarding: cross-tenant por desenho e sempre auditadas. */
+export function withSystem(fn) {
+  return withTransaction(async (client) => {
+    await client.query("SELECT set_config('app.system', 'on', true)");
+    return fn(client);
+  });
+}
+
 export async function closePool() {
   await pool.end();
 }

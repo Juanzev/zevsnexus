@@ -28,6 +28,7 @@ Object.assign(process.env, {
   EMAIL_PROVIDER: 'log',
   EMAIL_OUTBOX_DIR: outboxDir,
   JOBS_ENABLED: 'false',
+  PLATFORM_ADMIN_EMAILS: 'admin-zevs@exemplo.local',
 });
 
 rmSync(outboxDir, { recursive: true, force: true });
@@ -36,10 +37,11 @@ mkdirSync(outboxDir, { recursive: true });
 const client = new pg.Client({ connectionString: databaseUrl });
 await client.connect();
 await client.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
-await client.end();
-
 const { runMigrations } = await import('../src/shared/migrations.js');
 await runMigrations({ databaseUrl, direction: 'up' });
+const { seedCatalog } = await import('../seeds/catalog.js');
+await seedCatalog(client);
+await client.end();
 
 const { createApp } = await import('../src/app.js');
 createApp({ rateLimits: false }).listen(Number(port), () => {

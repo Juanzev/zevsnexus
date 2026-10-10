@@ -15,6 +15,7 @@
     "migrate:down": "node scripts/migrate.js down",
     "migrate:redo": "node scripts/migrate.js redo",
     "migrate:status": "node scripts/migrate.js status",
+    "seed": "node scripts/seed.js",
     "lint": "eslint .",
     "test": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand",
     "test:unit": "node --experimental-vm-modules node_modules/jest/bin/jest.js --runInBand tests/unit",

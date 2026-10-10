@@ -58,6 +58,19 @@ const schema = z
     EMAIL_OUTBOX_DIR: z.string().min(1).optional(),
     JOBS_ENABLED: boolean.default(false),
     RENDER_GIT_COMMIT: z.string().min(1).optional(),
+    // Bootstrap do Painel ZEVS: só vale com o e-mail verificado (pág. 05).
+    PLATFORM_ADMIN_EMAILS: z
+      .string()
+      .transform((value) =>
+        value
+          .split(',')
+          .map((item) => item.trim().toLowerCase())
+          .filter(Boolean),
+      )
+      .prefault(''),
+    // Plano e período de teste de empresa nova (pág. 13). Sem DEFAULT_PLAN, vale o plano padrão do catálogo.
+    DEFAULT_PLAN: z.string().regex(/^[a-z_]+$/).optional(),
+    TRIAL_DAYS: z.coerce.number().int().min(0).max(365).default(30),
   })
   .superRefine((cfg, ctx) => {
     if (cfg.CORS_ORIGIN.includes('*')) {
