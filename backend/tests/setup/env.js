@@ -13,7 +13,10 @@ Object.assign(process.env, {
   SERVE_FRONTEND: 'false',
   EMAIL_PROVIDER: 'log',
   JOBS_ENABLED: 'false',
+  PLATFORM_ADMIN_EMAILS: 'admin-zevs@teste.zevs.local',
+  TRIAL_DAYS: '30',
 });
+delete process.env.DEFAULT_PLAN;
 delete process.env.EMAIL_OUTBOX_DIR;
 delete process.env.CF_ORIGIN_SECRET;
 delete process.env.RENDER_GIT_COMMIT;

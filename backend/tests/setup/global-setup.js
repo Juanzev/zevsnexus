@@ -1,5 +1,7 @@
-// Antes da suíte: confere a trava anti-produção, recria o schema e aplica as migrations do zero.
+// Antes da suíte: confere a trava anti-produção, recria o schema, aplica as migrations do zero e
+// o seed do catálogo (permissões, papéis, features, planos).
 import pg from 'pg';
+import { seedCatalog } from '../../seeds/catalog.js';
 import { runMigrations } from '../../src/shared/migrations.js';
 import { assertSafeTestDatabase, TEST_DATABASE_URL } from './test-database.js';
 
@@ -9,8 +11,9 @@ export default async function globalSetup() {
   await client.connect();
   try {
     await client.query('DROP SCHEMA public CASCADE; CREATE SCHEMA public;');
+    await runMigrations({ databaseUrl: TEST_DATABASE_URL, direction: 'up' });
+    await seedCatalog(client);
   } finally {
     await client.end();
   }
-  await runMigrations({ databaseUrl: TEST_DATABASE_URL, direction: 'up' });
 }
