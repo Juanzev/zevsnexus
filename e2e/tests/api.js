@@ -43,5 +43,49 @@ export async function approvedCompany({ name = 'Lucas Andrade', companyName = `E
     data: {},
   });
   await api.dispose();
-  return { email, companyName };
+  return { email, companyName, token: ownerToken, companyId: company.id };
+}
+
+/**
+ * Dados de exemplo pela API (para auditar telas de detalhe): prestador, despesa paga em parte e um
+ * documento PDF (intenção → PUT no /dev-storage → POST /documents). Devolve os ids.
+ */
+export async function seedCompanyData({ token, companyId }) {
+  const api = await client();
+  const headers = { Authorization: `Bearer ${token}`, 'X-Company-Id': companyId };
+  const post = async (path, data) => {
+    const res = await api.post(`/api/v1${path}`, { headers: { ...headers, 'Idempotency-Key': randomUUID() }, data });
+    if (!res.ok()) throw new Error(`${path} ${res.status()}: ${await res.text()}`);
+    return (await res.json()).data;
+  };
+  const { party } = await post('/parties', {
+    person_type: 'company',
+    name: 'Comercial de Materiais de Construção Vasconcellos e Filhos Ltda',
+    document: '11.222.333/0001-81',
+    roles: ['supplier', 'service_provider'],
+    specialty: 'Materiais elétricos e hidráulicos',
+    phone: '(92) 99876-5432',
+    email: 'contato.vendas.corporativas@materiais-vasconcellos.exemplo.local',
+    pix_key: 'financeiro.pagamentos.corporativos@materiais-vasconcellos.exemplo.local',
+  });
+  const { expense } = await post('/expenses', {
+    description: 'Fornecimento de cabos, disjuntores e quadro de distribuição da obra residencial',
+    amount_cents: 1_234_567_89,
+    due_date: '2026-10-01',
+    party_id: party.id,
+    tags: ['Obra Residencial Vasconcellos', 'Elétrica'],
+    notes: 'Entrega parcial combinada com o mestre de obras; o restante na próxima semana.',
+  });
+  await post(`/expenses/${expense.id}/payments`, { paid_on: '2026-10-01', amount_cents: 500_000_00, method: 'transfer', reference: 'TED 000123' });
+
+  const pdf = Buffer.from(['%PDF-1.4', '1 0 obj << /Type /Catalog >> endobj', 'trailer << /Root 1 0 R >>', '%%EOF', ''].join('\n'));
+  const intent = await post('/files/upload-intents', {
+    filename: 'Contrato de fornecimento de materiais elétricos — obra residencial Vasconcellos.pdf',
+    size_bytes: pdf.length,
+  });
+  const put = await api.put(new URL(intent.upload.url).pathname, { headers: intent.upload.headers, data: pdf });
+  if (!put.ok()) throw new Error(`PUT ${put.status()}`);
+  const { document } = await post('/documents', { file_id: intent.file.id, tags: ['Contratos'], expires_on: '2026-10-20' });
+  await api.dispose();
+  return { partyId: party.id, expenseId: expense.id, documentId: document.id };
 }

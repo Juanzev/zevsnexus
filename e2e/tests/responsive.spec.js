@@ -1,7 +1,7 @@
 // Auditoria de responsividade (pág. 10 e 17): toda tela sem rolagem lateral em 320, 375 e 1280 px.
 import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
-import { ADMIN_EMAIL, approvedCompany, verifiedAccount } from './api.js';
+import { ADMIN_EMAIL, approvedCompany, seedCompanyData, verifiedAccount } from './api.js';
 import { expectNoHorizontalScroll, login, uniqueEmail } from './helpers.js';
 
 const WIDTHS = [320, 375, 1280];
@@ -17,13 +17,24 @@ const APP_ROUTES = [
   '/app/prestadores',
 ];
 
-async function visitAll(page, routes) {
+/** Controles clicáveis visíveis com menos de 44 px de altura (pág. 10: alvo de toque mínimo). */
+function smallTargets(page) {
+  return page.evaluate(() =>
+    [...document.querySelectorAll('.btn, .tab, .nav-link, .bottom-bar-item, .input')]
+      .filter((element) => element.offsetParent !== null && !element.closest('[hidden]'))
+      .map((element) => ({ text: (element.textContent || element.getAttribute('aria-label') || element.name || '').trim().slice(0, 40), height: element.getBoundingClientRect().height }))
+      .filter((target) => target.height < 44),
+  );
+}
+
+async function visitAll(page, routes, { checkTargets = false } = {}) {
   for (const route of routes) {
     await page.goto(route);
     await expect(page.locator('h1')).toBeVisible();
     // Espera os dados da tela carregarem antes de medir.
     await expect(page.locator('[role="status"]')).toHaveCount(0);
     await expectNoHorizontalScroll(page);
+    if (checkTargets) expect({ route, small: await smallTargets(page) }).toEqual({ route, small: [] });
   }
 }
 
@@ -49,14 +60,20 @@ for (const width of WIDTHS) {
 
   test(`painel da empresa em ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });
-    const { email } = await approvedCompany({
+    const company = await approvedCompany({
       name: 'Teodoro Albuquerque de Vasconcellos',
       companyName: `Vasconcellos Engenharia, Arquitetura e Gestão de Obras ${randomUUID().slice(0, 4)}`,
     });
+    // Dados com textos longos: as telas de detalhe também não podem rolar para o lado.
+    const ids = await seedCompanyData(company);
     await page.goto('/login');
-    await login(page, { email });
+    await login(page, { email: company.email });
     await expect(page.locator('h1')).toBeVisible();
-    await visitAll(page, APP_ROUTES);
+    await visitAll(
+      page,
+      [...APP_ROUTES, `/app/financeiro/${ids.expenseId}`, `/app/prestadores/${ids.partyId}`, `/app/documentos/${ids.documentId}`],
+      { checkTargets: width < 1024 },
+    );
     // Barra inferior só no celular; sidebar só no desktop.
     await expect(page.locator('.bottom-bar')).toBeVisible({ visible: width < 1024 });
     await expect(page.locator('.sidebar')).toBeVisible({ visible: width >= 1024 });
