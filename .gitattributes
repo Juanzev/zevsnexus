@@ -1,7 +1,4 @@
-* text=auto eol=lf
-*.png binary
-*.jpg binary
-*.ico binary
-*.pdf binary
-*.xlsx binary
-*.xls binary
+# Planilhas fantasma: os bytes são o que o Excel e o LibreOffice gravaram (CRLF, Windows-1252, BOM).
+# Nada de conversão de fim de linha.
+fixtures/planilhas/*.csv -text
+fixtures/planilhas/*.ps1 -text
