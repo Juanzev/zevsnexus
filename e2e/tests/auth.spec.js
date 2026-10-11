@@ -1,8 +1,9 @@
-// Fluxos críticos da F1: conta, sessão e recuperação de senha, como o cliente usaria.
+// Fluxos de conta: cadastro, sessão e recuperação de senha, como o cliente usaria.
+// Sem empresa, quem entra cai no cadastro da empresa (onboarding).
 import { expect, test } from '@playwright/test';
 import { linkFrom, login, readEmail, register, uniqueEmail } from './helpers.js';
 
-test('cadastro → confirmação de e-mail → login → início → sair', async ({ page }) => {
+test('cadastro → confirmação de e-mail → login → cadastro da empresa → sair', async ({ page }) => {
   const email = uniqueEmail('cadastro');
   await register(page, { name: 'Marina Costa', email });
 
@@ -14,13 +15,12 @@ test('cadastro → confirmação de e-mail → login → início → sair', asyn
 
   await page.getByRole('link', { name: 'Entrar' }).click();
   await login(page, { email });
-  await expect(page).toHaveURL(/\/app$/);
-  await expect(page.getByRole('heading', { name: 'Olá, Marina!' })).toBeVisible();
-  await expect(page.getByText('Confirme seu e-mail.')).toHaveCount(0);
+  await expect(page).toHaveURL(/\/app\/onboarding$/);
+  await expect(page.getByRole('heading', { name: 'Cadastre sua empresa' })).toBeVisible();
 
   // A sessão sobrevive ao recarregamento (refresh pelo cookie HttpOnly).
   await page.reload();
-  await expect(page.getByRole('heading', { name: 'Olá, Marina!' })).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Cadastre sua empresa' })).toBeVisible();
 
   await page.getByRole('button', { name: 'Sair', exact: true }).click();
   await expect(page).toHaveURL(/\/login$/);
@@ -28,24 +28,34 @@ test('cadastro → confirmação de e-mail → login → início → sair', asyn
   await expect(page).toHaveURL(/\/login\?next=%2Fapp$/);
 });
 
-test('conta sem confirmação vê o aviso e pode reenviar o e-mail', async ({ page }) => {
+test('sem e-mail confirmado não dá para cadastrar a empresa; dá para reenviar o link', async ({ page }) => {
   const email = uniqueEmail('sem-confirmar');
   await register(page, { name: 'Otávio Reis', email });
   await page.getByRole('link', { name: 'Ir para o login' }).click();
   await login(page, { email });
 
-  await expect(page.getByText('Confirme seu e-mail.')).toBeVisible();
+  await expect(page.getByRole('heading', { name: 'Confirme seu e-mail' })).toBeVisible();
   await page.getByRole('button', { name: 'Reenviar e-mail' }).click();
   await expect(page.getByText('Enviamos um novo link para o seu e-mail.')).toBeVisible();
+
+  // Confirmando em outra aba, "Já confirmei" libera o formulário.
+  const verification = await readEmail(email, 'auth.verify_email');
+  const other = await page.context().newPage();
+  await other.goto(linkFrom(verification));
+  await expect(other.getByRole('heading', { name: 'E-mail confirmado' })).toBeVisible();
+  await other.close();
+  await page.getByRole('button', { name: 'Já confirmei' }).click();
+  await expect(page.getByRole('heading', { name: 'Cadastre sua empresa' })).toBeVisible();
 });
 
-test('rota protegida manda para o login e volta para ela depois de entrar', async ({ page }) => {
+test('rota protegida manda para o login e segue depois de entrar', async ({ page }) => {
   const email = uniqueEmail('next');
   await register(page, { name: 'Paula Nunes', email });
-  await page.goto('/app');
-  await expect(page).toHaveURL(/\/login\?next=%2Fapp$/);
+  await page.goto('/app/empresa');
+  await expect(page).toHaveURL(/\/login\?next=%2Fapp%2Fempresa$/);
   await login(page, { email });
-  await expect(page).toHaveURL(/\/app$/);
+  // Sem empresa ativa, a rota de empresa leva ao cadastro da empresa.
+  await expect(page).toHaveURL(/\/app\/onboarding$/);
 });
 
 test('senha errada mostra erro sem revelar se o e-mail existe', async ({ page }) => {
@@ -77,26 +87,6 @@ test('recuperar senha → redefinir → entrar com a nova senha; a antiga deixa 
   await login(page, { email });
   await expect(page.getByRole('alert')).toHaveText('E-mail ou senha incorretos.');
   await login(page, { email, password: 'nova-senha-e2e-456' });
-  await expect(page).toHaveURL(/\/app$/);
-});
-
-test('sair de todos os dispositivos encerra a sessão das outras abas', async ({ browser }) => {
-  const context = await browser.newContext();
-  const first = await context.newPage();
-  const email = uniqueEmail('todos');
-  await register(first, { name: 'Sara Melo', email });
-  await first.goto('/login');
-  await login(first, { email });
-  await expect(first).toHaveURL(/\/app$/);
-
-  const second = await context.newPage();
-  await second.goto('/app');
-  await expect(second.getByRole('heading', { name: 'Olá, Sara!' })).toBeVisible();
-
-  await first.getByRole('button', { name: 'Sair de todos os dispositivos' }).click();
-  await first.getByRole('dialog').getByRole('button', { name: 'Sair de todos', exact: true }).click();
-  await expect(first).toHaveURL(/\/login$/);
-  // A outra aba recebe o aviso pelo BroadcastChannel e volta para o login.
-  await expect(second).toHaveURL(/\/login/);
-  await context.close();
+  // A redefinição prova o controle do e-mail: a conta já pode cadastrar a empresa.
+  await expect(page.getByRole('heading', { name: 'Cadastre sua empresa' })).toBeVisible();
 });

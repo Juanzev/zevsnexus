@@ -1,29 +1,64 @@
 // Auditoria de responsividade (pág. 10 e 17): toda tela sem rolagem lateral em 320, 375 e 1280 px.
+import { randomUUID } from 'node:crypto';
 import { expect, test } from '@playwright/test';
-import { expectNoHorizontalScroll, login, register, uniqueEmail } from './helpers.js';
+import { ADMIN_EMAIL, approvedCompany, verifiedAccount } from './api.js';
+import { expectNoHorizontalScroll, login, uniqueEmail } from './helpers.js';
 
 const WIDTHS = [320, 375, 1280];
 const PUBLIC_ROUTES = ['/login', '/cadastro', '/recuperar-senha', '/redefinir-senha', '/verificar-email', '/rota-inexistente'];
+const APP_ROUTES = ['/app', '/app/empresa', '/app/configuracoes'];
+
+async function visitAll(page, routes) {
+  for (const route of routes) {
+    await page.goto(route);
+    await expect(page.locator('h1')).toBeVisible();
+    // Espera os dados da tela carregarem antes de medir.
+    await expect(page.locator('[role="status"]')).toHaveCount(0);
+    await expectNoHorizontalScroll(page);
+  }
+}
 
 for (const width of WIDTHS) {
   test(`telas públicas em ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });
-    for (const route of PUBLIC_ROUTES) {
-      await page.goto(route);
-      await expect(page.locator('h1')).toBeVisible();
-      await expectNoHorizontalScroll(page);
-    }
+    await visitAll(page, PUBLIC_ROUTES);
   });
 
-  test(`início logado em ${width}px`, async ({ page }) => {
+  test(`cadastro da empresa e "em análise" em ${width}px`, async ({ page }) => {
     await page.setViewportSize({ width, height: 800 });
-    const email = uniqueEmail(`responsivo-${width}`);
-    await register(page, { name: 'Teodoro Albuquerque de Vasconcellos', email });
+    const email = uniqueEmail(`onb-${width}`);
+    await verifiedAccount({ name: 'Teodoro Albuquerque de Vasconcellos', email });
+    await page.goto('/login');
+    await login(page, { email });
+    await expect(page.getByRole('heading', { name: 'Cadastre sua empresa' })).toBeVisible();
     await expectNoHorizontalScroll(page);
+    await page.getByLabel('Razão social').fill(`Albuquerque de Vasconcellos Engenharia e Construções ${randomUUID().slice(0, 4)} Ltda`);
+    await page.getByRole('button', { name: 'Cadastrar empresa' }).click();
+    await expect(page.getByRole('heading', { name: 'Empresa em análise' })).toBeVisible();
+    await expectNoHorizontalScroll(page);
+  });
+
+  test(`painel da empresa em ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    const { email } = await approvedCompany({
+      name: 'Teodoro Albuquerque de Vasconcellos',
+      companyName: `Vasconcellos Engenharia, Arquitetura e Gestão de Obras ${randomUUID().slice(0, 4)}`,
+    });
     await page.goto('/login');
     await login(page, { email });
     await expect(page.locator('h1')).toBeVisible();
-    await expectNoHorizontalScroll(page);
+    await visitAll(page, APP_ROUTES);
+    // Barra inferior só no celular; sidebar só no desktop.
+    await expect(page.locator('.bottom-bar')).toBeVisible({ visible: width < 1024 });
+    await expect(page.locator('.sidebar')).toBeVisible({ visible: width >= 1024 });
+  });
+
+  test(`Painel ZEVS em ${width}px`, async ({ page }) => {
+    await page.setViewportSize({ width, height: 800 });
+    await verifiedAccount({ name: 'Equipe ZEVS', email: ADMIN_EMAIL });
+    await page.goto('/login');
+    await login(page, { email: ADMIN_EMAIL });
+    await visitAll(page, ['/admin/empresas?status=all']);
   });
 }
 
@@ -33,5 +68,11 @@ test('alvos de toque dos botões principais têm pelo menos 44 px', async ({ pag
   for (const name of ['Entrar', 'Mostrar senha']) {
     const box = await page.getByRole('button', { name }).boundingBox();
     expect(box.height, name).toBeGreaterThanOrEqual(44);
+  }
+  const { email } = await approvedCompany();
+  await login(page, { email });
+  await expect(page.locator('.bottom-bar')).toBeVisible();
+  for (const item of await page.locator('.bottom-bar-item').all()) {
+    expect((await item.boundingBox()).height).toBeGreaterThanOrEqual(44);
   }
 });
