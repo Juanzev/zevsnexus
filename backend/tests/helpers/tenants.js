@@ -22,7 +22,7 @@ export async function addMember(company, role, { status = 'active', verified = t
 /**
  * @returns {{ company, members: Record<string, {user, membershipId, token}>, headers(role) }}
  */
-export async function createTenant({ roles = ['owner'], status = 'active', legalName } = {}) {
+export async function createTenant({ roles = ['owner'], status = 'active', legalName, plan = 'standard' } = {}) {
   const creator = await createUser({ email: uniqueEmail('criador') });
   const { rows } = await pool.query(
     `INSERT INTO companies (legal_name, status, created_by, approved_at)
@@ -34,9 +34,10 @@ export async function createTenant({ roles = ['owner'], status = 'active', legal
   await pool.query('INSERT INTO company_branding (company_id) VALUES ($1)', [company.id]);
   await pool.query('INSERT INTO company_usage (company_id) VALUES ($1)', [company.id]);
   await pool.query(
-    "INSERT INTO subscriptions (company_id, plan_code, status) VALUES ($1, 'standard', 'active')",
-    [company.id],
+    "INSERT INTO subscriptions (company_id, plan_code, status) VALUES ($1, $2, 'active')",
+    [company.id, plan],
   );
+  await pool.query('INSERT INTO company_settings (company_id) VALUES ($1)', [company.id]);
 
   const members = {};
   for (const role of roles) members[role] = await addMember(company, role);
