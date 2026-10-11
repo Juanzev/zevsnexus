@@ -387,6 +387,25 @@ StorageProvider
 - **Exclusão física** só por job, depois da retenção da lixeira (F10). Nenhuma rota apaga um objeto do storage diretamente.
 - **Backup de arquivos (D12f):** cópia diária dos objetos novos para um segundo bucket. A implementação é definida na F5.
 
+### 10.3 Como fica na implementação (F3)
+
+- **Assinatura S3 para o R2:** `aws4fetch` (sem dependências, indicado pela Cloudflare). Na URL de PUT, `Content-Length` e `Content-Type` entram nos `SignedHeaders` (`allHeaders`): o R2 recusa corpo de tamanho ou tipo diferente do declarado. Operações do servidor (`HEAD`, `GET` com `Range`, `DELETE`) usam assinatura por header.
+- **O tipo do arquivo é decidido pelo servidor** a partir da extensão (allowlist). O navegador recebe o `Content-Type` canônico que deve enviar no PUT; o MIME informado pelo navegador só é conferido contra a lista daquela extensão (no Windows, por exemplo, CSV chega como `application/vnd.ms-excel`).
+- **Confirmar acontece na operação que usa o arquivo:** criar documento (`POST /documents`) ou nova versão (`POST /documents/:id/versions`). Não existe arquivo "confirmado e solto".
+
+  Na confirmação, na mesma transação:
+  1. trava o `files` (`FOR UPDATE`) e confere `pending`, dono (empresa) e validade;
+  2. `HEAD` confere o tamanho;
+  3. os primeiros 4 KB conferem os magic bytes;
+  4. a cota sobe por `UPDATE` atômico;
+  5. o arquivo vira `ready`, o documento ou a versão é criado e a auditoria é gravada.
+
+  Se reprovar: o objeto é apagado, `files.status = rejected` e a resposta é `422 FILE_REJECTED`.
+- **Provider local (dev) e memória (teste):** mesma interface. As "URLs assinadas" apontam para `/dev-storage/*` na própria API: um token HMAC carrega chave, validade, tamanho, tipo e disposição. Essas rotas só existem com `STORAGE_PROVIDER=local|memory`, e o boot falha em produção sem `r2`.
+- **Download:** `POST /documents/:id/download-url` devolve a URL. É `POST`, e não link direto, porque o access token vive em memória. A auditoria registra a versão baixada.
+- **Lixeira não devolve cota:** a cota só é devolvida na exclusão física (job da F10).
+- **CSP:** a origem S3 da conta R2 entra em `connect-src` e `img-src`, a partir da configuração do provider.
+
 ## 11. Documentos
 
 - **"Um arquivo, um lugar":** todo arquivo é um `document`. Financeiro, Notas, Planilhas e Prestadores **vinculam** documentos.
@@ -401,8 +420,20 @@ StorageProvider
 - **Histórico:** versões + auditoria do documento (quem enviou, moveu, renomeou, baixou, arquivou).
 - **Listas:** paginação, busca, filtros (pasta, tipo, tag, período, favoritos, arquivados) e ordenação **no servidor**. Lista no desktop, cartões no celular, filtros em gaveta.
 - **Envio:** arrastar e soltar (desktop), "Tirar foto" e "Escolher arquivo" (celular), vários arquivos de uma vez, com progresso por arquivo.
-- **Validade (se D5.3 for aprovado):** `expires_on` opcional, com alerta "vence em 30 dias" no Início.
+- **Validade (D5.3, aprovada):** `expires_on` opcional, com filtro "Vencendo" (próximos 30 dias, no fuso da empresa) e alerta no Início.
 - **Futuro:** pastas com acesso restrito, extração de texto ou OCR, assinatura digital.
+
+### 11.1 Como fica na implementação (F3)
+
+- **Pastas:**
+  - profundidade máxima de 8;
+  - nome único entre irmãs (sem diferenciar maiúsculas);
+  - mover verifica ciclo dentro de um lock por empresa (`pg_advisory_xact_lock`), para dois movimentos simultâneos não formarem um ciclo;
+  - **só pasta vazia pode ser excluída** (`409 FOLDER_NOT_EMPTY`): a lixeira é dos documentos.
+- **Tipos de documento e tags:** quem tem `documents.manage` cria. Tags são criadas ao marcar (até 10 por documento, 40 caracteres cada). Tipo é arquivado, nunca apagado.
+- **Defaults da empresa nova:** pastas sugeridas, tipos e `company_settings` (com as pastas padrão) são criados no onboarding, na mesma transação, por `documents.service.createDefaults`. Empresas criadas antes da F3 ganham só a linha de `company_settings` (sem pastas), pela migration 0009.
+- **Auditoria:** título, descrição e nome de arquivo podem conter nomes de pessoas, então mudanças nesses campos registram só `[dado pessoal]`. Uploads registram extensão, tamanho e número da versão.
+- **Busca da lista:** `search_text` gerada (título + descrição, sem acento) com índice trigram, mais o nome das tags. A busca global (F8) amplia isso.
 
 ## 12. Financeiro e prestadores
 
@@ -524,7 +555,7 @@ StorageProvider
 | Auth | `POST /auth/register`, `/auth/login`, `/auth/refresh`, `/auth/logout`, `/auth/logout-all`, `/auth/password/forgot`, `/auth/password/reset`, `/auth/password/change`, `/auth/email/verify`, `/auth/email/resend` · `GET /me` (usuário, empresas, permissões e features da empresa atual) |
 | Empresa | `POST /companies` (onboarding) · `GET /company/context` · `GET`/`PATCH /company` · CRUD `/company/contacts` · `GET`/`PATCH /company/settings` (fuso e cor da marca) |
 | Configurações | CRUD `/finance-categories`, `/document-types`, `/tags` |
-| Arquivos | `POST /files/upload-intents` · `POST /files/:id/confirm` |
+| Arquivos | `POST /files/upload-intents` (a confirmação acontece em `POST /documents` ou `POST /documents/:id/versions`) |
 | Documentos | CRUD `/folders` + `POST /folders/:id/move` · CRUD `/documents` + `POST /documents/:id/versions`, `/documents/:id/versions/:n/restore`, `/documents/:id/download-url`, `/documents/:id/move`, `/documents/:id/archive`, `/documents/:id/unarchive`, `/documents/:id/favorite` (+ `DELETE`) · `GET /documents/:id/history` · `GET /trash` + `POST /trash/:id/restore` |
 | Prestadores | CRUD `/parties` · `GET /parties/:id/expenses`, `/parties/:id/documents` · `POST /parties/:id/documents` |
 | Financeiro | CRUD `/expenses` · `POST /expenses/:id/payments`, `/expenses/:id/cancel`, `/expenses/:id/documents` · `POST /expense-payments/:id/void` |
