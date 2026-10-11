@@ -15,7 +15,7 @@ O primeiro cliente é uma empresa de engenharia civil, mas nenhum comportamento 
 | 2 | Tenant, RBAC, Empresa, onboarding, Painel ZEVS mínimo, staging | ✅ Aprovada (11/10/2026) |
 | 3 | Armazenamento (R2) + Central de Documentos | ✅ Aprovada (11/10/2026) |
 | 4 | Prestadores + Financeiro | ✅ Aprovada (11/10/2026) |
-| 5 | PWA + mobile + produção paga → **piloto** | 🚧 Em andamento |
+| 5 | PWA + mobile + produção paga → **piloto** | ✅ Concluída — aguardando aprovação (produção: roteiro com o Juan) |
 | 6 | Planilhas (níveis 1 e 2) | ⏳ |
 | 7 | Notas fiscais | ⏳ |
 | 8 | Busca global + dashboard completo → **MVP completo** | ⏳ |
@@ -48,6 +48,7 @@ cd ../frontend && npm ci && npm run build
 | [`docs/FASE-0.md`](docs/FASE-0.md) | Proposta e decisões aprovadas |
 | [`docs/ARCHITECTURE.md`](docs/ARCHITECTURE.md) | Fonte da verdade técnica |
 | [`docs/SECURITY.md`](docs/SECURITY.md) | Checklist de segurança por funcionalidade |
+| [`docs/PRODUCTION.md`](docs/PRODUCTION.md) | Go-live: produção, backups, restore, checklist, aparelho real, kill switch |
 | [`docs/API.md`](docs/API.md) | Contratos da API |
 | [`docs/DATABASE.md`](docs/DATABASE.md) | Migrations e tabelas |
 | [`docs/DEPLOYMENT.md`](docs/DEPLOYMENT.md) | Ambiente local, CI e deploy |

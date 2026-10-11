@@ -31,6 +31,9 @@ O cliente renova a sessão (`POST /auth/refresh`) ao receber `TOKEN_EXPIRED`, ou
 | `GET /health` | `200 { "status": "ok" }`. Não toca no banco; fora do rate limit |
 | `GET /ready` | `200 { "status": "ready" }`, ou `503 { "status": "not_ready", "reason": "pending_migrations" \| "database_unavailable" }` |
 | `GET /api/version` | `200 { "data": { "version": "<sha do commit>" } }`, `Cache-Control: no-cache` |
+| `GET /sw.js` | Service worker (rede primeiro), `Cache-Control: no-store`. Com `SW_KILL_SWITCH=true`, o kill switch |
+| `GET /manifest.webmanifest` | Manifest da PWA (`application/manifest+json`), início em `/app` |
+| `GET /offline.html` | Página "Sem conexão" (reserva do service worker) |
 
 ## Autenticação (`/api/v1/auth`)
 

@@ -113,11 +113,14 @@ O blueprint está em [`render.yaml`](../render.yaml):
 
 > O plano free dorme sem tráfego (a primeira requisição demora) e os jobs param enquanto isso. É aceitável em staging. Produção vai para plano pago (Core, pág. 18).
 
-### Produção (F5, antes do piloto)
+### Produção (F5)
 
-| O que entra | Detalhe |
+O roteiro completo está em [`PRODUCTION.md`](PRODUCTION.md): Render pago (`render.production.yaml`), R2 de produção, Resend, Cloudflare, backups, restore testado, monitoramento, checklist de go-live, teste em aparelho real, kill switch e rollback.
+
+## Scripts de prontidão (backend)
+
+| Comando | O que faz |
 |---|---|
-| Render | Plano pago, com `preDeployCommand: cd backend && npm run migrate && npm run seed` |
-| Cloudflare | SSL Full strict, segredo de origem (`CF_ORIGIN_SECRET` + Transform Rule), WAF, Browser Cache TTL em "Respect Existing Headers" |
-| Arquivos e e-mail | R2; Resend com domínio verificado (SPF, DKIM, DMARC) |
-| Backup | Backup externo diário do banco e dos arquivos; restore testado e registrado |
+| `npm run prod:rehearsal` | Ensaio de produção local: banco novo, migrations e seed duas vezes, API com `NODE_ENV=production` e fluxo ponta a ponta. Também roda no CI |
+| `npm run db:restore-check -- <arquivo.dump> [--keep]` | Restaura um dump num banco temporário do cluster local e confere migrations, integridade e `/ready` |
+| `node scripts/render-icons.mjs` (frontend) | Regera os ícones PNG da PWA a partir do desenho do favicon (usa o Chromium do Playwright de `e2e/`) |

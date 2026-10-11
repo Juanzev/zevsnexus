@@ -185,3 +185,34 @@ Dinheiro em centavos `bigint` do banco à tela (a tela lê o texto digitado sem 
 | Comparação de período no dashboard e alertas | F8 |
 | Exportação e anonimização de prestador pessoa física (LGPD) | F10 |
 | Contas a receber (`receivables`) e recorrência: fora do MVP (D4) | — |
+
+## Fase 5 — PWA, produção e piloto (11/10/2026)
+
+### Checklist por funcionalidade
+
+| Funcionalidade | Quem executa | Tenant | Permissão | Dados visíveis | IDOR | Race condition | Transação | Audit log | Informação sensível |
+|---|---|---|---|---|---|---|---|---|---|
+| **Service worker** (`/sw.js`) | Navegador de qualquer visitante | — | — | Só o shell público (CSS, módulos JS, ícones, "Sem conexão") | — | — | — | — | **Nunca** guarda `/api/*`, `/dev-storage/*`, `/sw.js`, métodos que não sejam `GET` nem outra origem (URLs assinadas do R2): dado de empresa e arquivo nunca ficam no aparelho (teste E2E confere o cache) |
+| **Página "Sem conexão"** | Navegador sem rede | — | — | Texto fixo | — | — | — | — | Sem script e sem dado da empresa |
+| **Kill switch** (`SW_KILL_SWITCH`) | Juan (variável no Render) | — | — | — | — | — | — | — | Worker que apaga caches, se desregistra e recarrega; testado |
+| **Manifest e ícones** | Público | — | — | Nome e ícones do app | — | — | — | — | Manifest único (D9): nenhum dado de empresa |
+| **"Tirar foto"** (comprovante e anexo) | Quem envia arquivo | Igual ao envio da F3 | Igual ao envio da F3 | — | — | — | — | — | A foto passa pela mesma conferência (tipo, magic bytes, cota) |
+| **Backup do banco** (GitHub Action) | Agendado / Juan | Todos (é o banco inteiro) | Segredo `PROD_DATABASE_URL` no GitHub | Dump completo | — | `concurrency` sem cancelar backup em curso | — | — | **Artefato privado** (repositório privado), 30 dias; o dump tem dados pessoais e financeiros: baixar só para restore e apagar a cópia local depois |
+| **Backup dos arquivos** (GitHub Action + rclone) | Agendado / Juan | Todos | Tokens próprios: leitura no bucket de produção, escrita só no de backup | Arquivos | — | `concurrency`; `--immutable` falha se uma chave mudar | — | — | Cópia, nunca sincronização (apagar em produção não apaga o backup); o app não tem credencial do bucket de backup |
+| **`db:restore-check` / `prod:rehearsal`** | Juan / CI, na máquina local | Banco temporário do cluster local (nome `zevs_nexus_*`; o de desenvolvimento é recusado) | — | — | — | — | — | — | Nunca conectam em produção; o ensaio usa credenciais fictícias de R2 e só assina URLs |
+
+### Controles da fase
+
+- **Atualização garantida:** service worker rede primeiro + `updateViaCache: 'none'` + `/sw.js` com `no-store` + banner "Nova versão" que pede `registration.update()` antes de recarregar.
+- **Ensaio de produção no CI** (`npm run prod:rehearsal`): validação de ambiente de produção (https, R2, bcrypt 12), HSTS, CSP com o endpoint do R2, cookie `__Secure-` com CSRF, migrations e seed idempotentes e o fluxo ponta a ponta.
+- **Restore com conferência de integridade:** além de restaurar, o `db:restore-check` confere que o pago de cada despesa é a soma dos pagamentos ativos e que o uso de armazenamento é a soma dos arquivos confirmados.
+- **Alvos de toque:** a auditoria E2E mede todos os botões, abas, links de navegação e campos em 320 e 375 px (≥ 44 px). Achou e corrigiu as abas (eram 40 px).
+
+### Pendências da F5
+
+| Item | Responsável |
+|---|---|
+| Domínio (D13.2), Resend com domínio verificado e Cloudflare | Juan, antes do piloto |
+| Render pago, R2 de produção, segredos e workflows de backup | Juan (`docs/PRODUCTION.md`) |
+| **Restore de um backup de produção** registrado na tabela | Juan, antes do piloto |
+| Teste em aparelho real (Android e iPhone) | Juan (`docs/PRODUCTION.md` §9) |

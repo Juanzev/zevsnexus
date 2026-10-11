@@ -12,7 +12,7 @@
 
 ## Estado atual
 
-- **F0 aprovada (09/10/2026) · F1 aprovada (10/10/2026) · F2 aprovada (11/10/2026) · F3 aprovada (11/10/2026) · F4 aprovada (11/10/2026) · F5 em andamento.**
+- **F0 aprovada (09/10/2026) · F1 aprovada (10/10/2026) · F2 aprovada (11/10/2026) · F3 aprovada (11/10/2026) · F4 aprovada (11/10/2026) · F5 concluída, aguardando aprovação (go-live depende do Juan: `docs/PRODUCTION.md`).**
 - **Plano:** F1 Fundação + Auth → F2 Tenant/RBAC/Empresa/Plataforma → F3 Armazenamento + Documentos → F4 Prestadores + Financeiro → F5 PWA + piloto → F6 Planilhas → F7 Notas → F8 Busca + dashboard → F9 Importação → F10 Equipe/LGPD/hardening → F11 Painel ZEVS completo.
 
 ## Fonte das regras
@@ -51,6 +51,8 @@ npm run dev                 # API + SPA em http://localhost:3000
 npm run lint
 npm test                    # unit + integração + segurança + concorrência + guardas estáticas
 npm run audit               # dependências de produção
+npm run prod:rehearsal      # ensaio de produção local (NODE_ENV=production + fluxo ponta a ponta)
+npm run db:restore-check -- <dump>   # restore testado num banco temporário
 
 # frontend/
 npm ci
@@ -194,5 +196,7 @@ Responder por escrito em `docs/SECURITY.md` antes do merge:
 - No `<dialog>`, `showModal()` foca o primeiro botão (o "X"): o `openFormModal` foca o primeiro campo depois de abrir.
 - - **Financeiro:** `paid_amount_cents` só muda em `expensesRepository.settle`; o status só sai da expressão única do repository. Pagamento novo de outro módulo (ex.: importação na F9) passa por `expenses.service`, nunca por `INSERT` direto.
 - **Espaço inseparável** (formatação de moeda, recuo de `<option>`): escreva `String.fromCharCode(0xa0)` ou `\s` na regex. O caractere literal é invisível e o ESLint recusa (`no-irregular-whitespace`).
+- **`<dialog>` com a aba em segundo plano:** o navegador pode atrasar o evento `close`. Os modais entregam o resultado no próprio clique/envio; não volte a depender só do `close`.
+- **Service worker:** rede primeiro, sempre; nada de `/api`, `/dev-storage` ou URL do R2 no cache. Mudou o `sw.js`? Rode `tests/pwa.spec.js`. Emergência: `SW_KILL_SWITCH=true` (ver `docs/PRODUCTION.md`).
 - **Scripts de edição:** Python com `"\1"` dentro de texto vira o caractere de controle `\x01`; use string crua (`r'''...'''`) ou edite pelo editor.
 - - Vulnerabilidade transitiva sem correção em ferramenta de desenvolvimento: registrar em `docs/SECURITY.md` (riscos aceitos). Se houver versão corrigida do pacote intermediário, usar `overrides` (ex.: `@parcel/watcher` do Tailwind).
