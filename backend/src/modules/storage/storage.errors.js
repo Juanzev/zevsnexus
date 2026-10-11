@@ -8,6 +8,14 @@ export class StoragePreconditionError extends Error {
   }
 }
 
+/** O objeto passa do tamanho que a operação aceita ler inteiro. */
+export class StorageObjectTooLargeError extends Error {
+  constructor(message = 'objeto grande demais para ler inteiro') {
+    super(message);
+    this.name = 'StorageObjectTooLargeError';
+  }
+}
+
 /** Falha de comunicação com o storage (rede, 5xx, tempo esgotado). */
 export class StorageUnavailableError extends Error {
   constructor(message, options) {

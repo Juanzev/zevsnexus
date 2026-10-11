@@ -5,7 +5,7 @@
 // Nenhuma URL assinada vai para log ou mensagem de erro.
 import { AwsClient } from 'aws4fetch';
 import { contentDisposition } from '../../../shared/files.js';
-import { StoragePreconditionError, StorageUnavailableError } from '../storage.errors.js';
+import { StorageObjectTooLargeError, StoragePreconditionError, StorageUnavailableError } from '../storage.errors.js';
 import { assertKey } from '../storage.keys.js';
 
 const TIMEOUT_MS = 8000;
@@ -85,6 +85,23 @@ export function createR2Provider({ accountId, accessKeyId, secretAccessKey, buck
       if (res.status === 412 || res.status === 404) throw new StoragePreconditionError();
       // A API S3 pode responder 200 com <Error> no corpo durante a cópia.
       if (!res.ok || !text.includes('CopyObjectResult')) throw unexpected('COPY', res);
+    },
+
+    /** Objeto inteiro (prévia de planilha), ou null se não existir. Recusa acima de maxBytes. */
+    async readObject(key, { maxBytes }) {
+      const res = await send('GET', key, { method: 'GET' });
+      if (res.status === 404) {
+        await res.body?.cancel();
+        return null;
+      }
+      if (!res.ok) throw unexpected('GET', res);
+      if (Number(res.headers.get('content-length') ?? 0) > maxBytes) {
+        await res.body?.cancel();
+        throw new StorageObjectTooLargeError();
+      }
+      const body = Buffer.from(await res.arrayBuffer());
+      if (body.length > maxBytes) throw new StorageObjectTooLargeError();
+      return body;
     },
 
     async delete(key) {

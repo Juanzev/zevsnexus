@@ -2,7 +2,7 @@
 // "URLs assinadas" apontando para /dev-storage/* na própria API (ver dev-storage.routes.js).
 // O "blob store" só sabe ler, gravar, copiar e apagar bytes; ETag, Range e condições ficam aqui.
 import { createHash } from 'node:crypto';
-import { StoragePreconditionError } from '../storage.errors.js';
+import { StorageObjectTooLargeError, StoragePreconditionError } from '../storage.errors.js';
 import { assertKey } from '../storage.keys.js';
 import { signDevToken } from '../dev-token.js';
 
@@ -70,6 +70,13 @@ export function createDevProvider({ name, baseUrl, blobs }) {
       const body = await current(fromKey, ifMatch);
       if (!body) throw new StoragePreconditionError('o objeto de origem não existe');
       await blobs.set(assertKey(toKey), Buffer.from(body));
+    },
+
+    /** Objeto inteiro (prévia de planilha), ou null se não existir. Recusa acima de maxBytes. */
+    async readObject(key, { maxBytes }) {
+      const body = await blobs.get(assertKey(key));
+      if (body && body.length > maxBytes) throw new StorageObjectTooLargeError();
+      return body ?? null;
     },
 
     async delete(key) {

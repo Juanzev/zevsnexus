@@ -2,7 +2,7 @@ import { randomUUID } from 'node:crypto';
 import { signDevToken, verifyDevToken } from '../../src/modules/storage/dev-token.js';
 import { createMemoryProvider } from '../../src/modules/storage/providers/memory.provider.js';
 import { createR2Provider } from '../../src/modules/storage/providers/r2.provider.js';
-import { StoragePreconditionError } from '../../src/modules/storage/storage.errors.js';
+import { StorageObjectTooLargeError, StoragePreconditionError } from '../../src/modules/storage/storage.errors.js';
 import { assertKey, fileKey, uploadKey } from '../../src/modules/storage/storage.keys.js';
 
 const companyId = randomUUID();
@@ -74,8 +74,17 @@ describe('provider memory (mesma interface do R2)', () => {
     await expect(provider.readRange(source, 0, 4, { ifMatch: head.etag })).rejects.toBeInstanceOf(StoragePreconditionError);
   });
 
-  test('objeto inexistente: head null, delete sem erro', async () => {
+  test('leitura inteira (prévia de planilha) com teto de bytes', async () => {
+    const key = fileKey(companyId, randomUUID());
+    await provider.write(key, Buffer.from('a;b;1;2'));
+    expect((await provider.readObject(key, { maxBytes: 100 })).toString()).toBe('a;b;1;2');
+    await expect(provider.readObject(key, { maxBytes: 4 })).rejects.toBeInstanceOf(StorageObjectTooLargeError);
+    await expect(provider.readObject('../fora', { maxBytes: 100 })).rejects.toThrow(/formato/);
+  });
+
+  test('objeto inexistente: head e readObject null, delete sem erro', async () => {
     expect(await provider.head(fileKey(companyId, randomUUID()))).toBeNull();
+    expect(await provider.readObject(fileKey(companyId, randomUUID()), { maxBytes: 100 })).toBeNull();
     await expect(provider.delete(fileKey(companyId, randomUUID()))).resolves.toBeUndefined();
   });
 });
