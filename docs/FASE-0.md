@@ -15,6 +15,7 @@ As decisões D1–D13 foram aprovadas conforme as recomendações. Nas perguntas
 | D5.3 · Validade do documento | Adotada (`expires_on` opcional, alerta no Início) — entra na F3 |
 | D7.2 · "Finalizada" | Emitida **e** paga (calculada). Pode ser revista na F7 com o cliente |
 | D12 a–f | Adotados; g não adotado |
+| D11 · Tags em despesas | Adotadas (11/10/2026, início da F4): mesmas tags da empresa, filtro e total por tag |
 
 Pendentes de informação do cliente, decididos na fase em que entram:
 
@@ -22,7 +23,6 @@ Pendentes de informação do cliente, decididos na fase em que entram:
 |---|---|
 | D6.4 · Planilhas reais | F6 |
 | D7.3 / D7.4 · Notas recebidas e tipos emitidos | F7 |
-| D11 · Tags em despesas (custo por obra) | F4 |
 | D13.2 · Domínio | F5 |
 
 Este documento é o resultado da Fase 0 (§39 do prompt oficial). O que precisa do seu ok está na **§6 (D1–D13)**. O detalhamento técnico está em [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) e as regras de trabalho do Claude estão em [`CLAUDE.md`](../CLAUDE.md). Os dois são rascunhos e passam a valer como fonte da verdade depois da aprovação.

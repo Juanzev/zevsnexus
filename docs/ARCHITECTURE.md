@@ -464,6 +464,37 @@ StorageProvider
 - **Indicadores** (definições na FASE-0, D4): A pagar vencido · Vence em 7 dias · Pago no período (caixa) · Despesas do período (vencimento).
 - **Telas:** abas Pendentes · Vencidas · Próximas · Pagas · Canceladas; cartão com prestador, valor, vencimento e selo de status; formulário de uma tela (`Ctrl+Enter` salva); "Registrar pagamento" em gaveta; filtros em gaveta no celular.
 
+### 12.1 Como fica na implementação (F4)
+
+**Migrations.** `0010_parties` (`parties`, `party_documents`, `company_settings.parties_folder_id`) e `0011_finance` (`finance_categories`, `expenses`, `expense_payments`, `expense_documents`, `expense_tags`, `company_settings.upcoming_window_days`). As colunas de origem da importação (`source_import_id`, `source_row_number`) entram na F9, com a tabela que referenciam.
+
+**Prestadores e fornecedores (`parties`):**
+- `document_normalized`: CPF (11 dígitos) para pessoa física, CNPJ (14, alfanumérico) para jurídica, validados por dígito verificador; único por empresa entre ativos. Telefone guardado só com dígitos, como em contatos (a coluna gerada `phone_digits` fica desnecessária).
+- `search_text` gerada (nome + nome fantasia + especialidade, sem acento) com índice trigram; a busca também casa documento, telefone e e-mail.
+- Excluir é soft delete; despesas antigas continuam mostrando o nome.
+- **LGPD:** nome, documento, e-mail, telefone, chave PIX e observações viram `[dado pessoal]` na auditoria.
+
+**Despesas e pagamentos:**
+- **Status por uma expressão única** (`pending`/`scheduled`/`partially_paid`/`paid`), aplicada sempre que valor, pago ou agendamento mudam: pago = valor → `paid`; pago > 0 → `partially_paid`; com `scheduled_for` → `scheduled`; senão `pending`. `cancelled` só pela ação de cancelar.
+- **A função única do saldo** (`expensesRepository.settle`): `UPDATE … SET paid_amount_cents = paid_amount_cents + Δ, status = <expressão> WHERE … AND status <> 'cancelled' AND paid_amount_cents + Δ BETWEEN 0 AND amount_cents`. Nenhuma outra escrita toca `paid_amount_cents`.
+- **Pagamento append-only no banco:** trigger que proíbe `DELETE` e qualquer `UPDATE`, salvo marcar o estorno uma única vez (`voided_at`, `voided_by`, `void_reason`). Valor, data e forma nunca mudam.
+- **Registrar pagamento** (`finance.pay`): data de pagamento até hoje no fuso da empresa; valor até o saldo em aberto (`422 PAYMENT_EXCEEDS_BALANCE`).
+- **Estornar** (`finance.pay`): trava a despesa e depois o pagamento (sempre nessa ordem), motivo obrigatório.
+- **Editar** (`finance.manage`, com `version`): o valor não pode ficar abaixo do já pago; despesa cancelada não se edita.
+- **Cancelar** (`finance.manage`): só com nada pago (`409 EXPENSE_HAS_PAYMENTS`), motivo obrigatório. Não há exclusão de despesa: cancelar preserva o histórico.
+- **"Já paguei"** = `POST /expenses` com o objeto `payment` (exige também `finance.pay`): despesa, pagamento e comprovante na mesma transação. Sem vencimento informado, vale a data do pagamento.
+- **Comprovantes e anexos:** o arquivo novo é confirmado na transação da despesa ou do pagamento (`filesService.verifyUpload` + `claimFile`) e vira documento na pasta padrão de comprovantes (ou na raiz); `expense_documents` guarda o vínculo, o papel (`receipt`, `invoice`, `boleto`, `contract`, `other`) e, no comprovante, o pagamento. Também dá para vincular um documento que já está na Central. Estornar o pagamento não apaga o comprovante.
+- **Tags em despesas (D11, aprovado na F4):** `expense_tags` usa as mesmas `tags` da empresa (as dos documentos). Filtro por tag na lista e total do filtro: dá o custo por obra, filial ou evento sem módulo próprio.
+- **Abas:** Pendentes (tudo em aberto), Vencidas, Próximas (de hoje até hoje + `upcoming_window_days`, padrão 7, editável em Configurações), Pagas e Canceladas. "Vencida" e "próxima" calculadas no fuso da empresa. A lista devolve os totais do filtro (valor, pago, em aberto).
+- **Categorias:** padrão no onboarding (lista acima, `kind = expense`); empresas existentes recebem a lista pela migration. Arquivadas não recebem despesas novas.
+
+**Dashboard (`GET /dashboard`, F4 = bloco financeiro):**
+- Período calculado no servidor, no fuso da empresa: `today`, `yesterday`, `7d`, `30d`, `this_month` (padrão), `last_month`, `this_year`, `custom` (`from`/`to`, até 2 anos).
+- Bloco `finance` só para quem tem `finance.view` (o backend não envia os valores para quem não pode ver). Consultas numa transação com `SET LOCAL statement_timeout = '10s'`.
+- Indicadores (definições da D4): a pagar vencido; vence nos próximos 7 dias; pago no período (caixa, pagamentos não estornados); despesas do período (vencimento, não canceladas). A comparação com o período anterior entra na F8.
+
+**Permissões:** ver despesas e totais `finance.view`; lançar, editar, cancelar, anexar e categorias `finance.manage`; pagamento e estorno `finance.pay`. Prestadores: `parties.view` / `parties.manage`. Na ficha do prestador, as despesas e totais só aparecem com `finance.view`.
+
 ## 13. Planilhas e importação
 
 ### 13.1 Planilhas (níveis 1 e 2)
