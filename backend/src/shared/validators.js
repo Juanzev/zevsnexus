@@ -56,3 +56,9 @@ export const pagination = {
 };
 
 export const version = z.number({ error: 'Envie a versão do registro.' }).int().positive();
+
+/** Booleano de query string: só "true" ou "false". */
+export const queryBoolean = z.enum(['true', 'false']).transform((value) => value === 'true');
+
+/** Data de calendário AAAA-MM-DD (vencimento, validade): sem hora e sem fuso. */
+export const calendarDate = z.iso.date({ error: 'Data inválida. Use AAAA-MM-DD.' });

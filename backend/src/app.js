@@ -13,22 +13,34 @@ import { requestId } from './middlewares/request-id.js';
 import { createAuthRouter, createMeRouter } from './modules/auth/auth.routes.js';
 import { createCompanyRouter } from './modules/companies/companies.routes.js';
 import { createOnboardingRouter } from './modules/companies/onboarding.routes.js';
+import {
+  createDocumentsRouter,
+  createDocumentTypesRouter,
+  createFoldersRouter,
+  createTagsRouter,
+  createTrashRouter,
+} from './modules/documents/documents.routes.js';
+import { createFilesRouter } from './modules/files/files.routes.js';
 import { createPlatformRouter } from './modules/platform/platform.routes.js';
+import { createDevStorageRouter } from './modules/storage/dev-storage.routes.js';
+import { storage, usesDevStorage } from './modules/storage/storage.service.js';
 import { createClientIpResolver } from './shared/security/client-ip.js';
 import { createCsrfGuard } from './shared/security/csrf.js';
 import { createRateLimiters } from './shared/security/rate-limits.js';
 import { createSpaRouter } from './spa.js';
 
 // CSP de referência da STRUCTURE (pág. 06 §7): nenhum script inline nem de terceiros.
+// O storage entra em connect-src (PUT direto do navegador) e img-src (prévia) — ARCHITECTURE §10.2.
+const storageOrigins = storage().origins;
 const contentSecurityPolicy = {
   useDefaults: false,
   directives: {
     defaultSrc: ["'self'"],
     scriptSrc: ["'self'"],
     styleSrc: ["'self'", "'unsafe-inline'"],
-    imgSrc: ["'self'", 'data:'],
+    imgSrc: ["'self'", 'data:', ...storageOrigins],
     fontSrc: ["'self'"],
-    connectSrc: ["'self'"],
+    connectSrc: ["'self'", ...storageOrigins],
     manifestSrc: ["'self'"],
     workerSrc: ["'self'"],
     frameAncestors: ["'none'"],
@@ -76,8 +88,17 @@ export function createApp({ rateLimits = !env.isTest, serveFrontend = env.SERVE_
   app.use('/api/v1/me', createMeRouter());
   app.use('/api/v1/companies', createOnboardingRouter());
   app.use('/api/v1/company', createCompanyRouter());
+  app.use('/api/v1/files', createFilesRouter({ limiters }));
+  app.use('/api/v1/documents', createDocumentsRouter({ limiters }));
+  app.use('/api/v1/trash', createTrashRouter());
+  app.use('/api/v1/folders', createFoldersRouter());
+  app.use('/api/v1/document-types', createDocumentTypesRouter());
+  app.use('/api/v1/tags', createTagsRouter());
   app.use('/api/v1/admin', createPlatformRouter());
   app.use('/api', apiNotFound);
+
+  // "R2 de mentira" de desenvolvimento e testes; não existe com STORAGE_PROVIDER=r2.
+  if (usesDevStorage()) app.use('/dev-storage', createDevStorageRouter());
 
   if (serveFrontend) app.use(createSpaRouter());
 

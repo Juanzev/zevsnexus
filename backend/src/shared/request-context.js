@@ -8,6 +8,7 @@ export function requestContext(req) {
     companyId: req.tenant?.companyId ?? null,
     membershipId: req.tenant?.membershipId ?? null,
     permissions: req.tenant?.permissions ?? new Set(),
+    timezone: req.tenant?.timezone ?? null,
     actorType: req.platformAdmin ? 'platform_admin' : 'user',
     requestId: req.id ?? null,
     ip: req.clientIp ?? null,

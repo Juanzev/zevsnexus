@@ -4,6 +4,7 @@
 import { setTenant, withTenant, withTransaction } from '../../shared/db.js';
 import { AuthorizationError, ConflictError, NotFoundError } from '../../shared/errors.js';
 import { auditChanges, recordAudit } from '../audit/audit.service.js';
+import { createDefaults as createDocumentDefaults } from '../documents/documents.service.js';
 import { createOwnerMembership } from '../memberships/memberships.service.js';
 import { startSubscription } from '../plans/plans.service.js';
 import { companiesRepository, EDITABLE_PROFILE_COLUMNS } from './companies.repository.js';
@@ -44,7 +45,8 @@ function versionConflict(currentVersion) {
 }
 
 /**
- * Onboarding (pág. 03): empresa `pending` + marca + uso + vínculo de proprietário + assinatura,
+ * Onboarding (pág. 03): empresa `pending` + marca + uso + vínculo de proprietário + assinatura +
+ * pastas, tipos de documento e configurações sugeridos (F3),
  * numa transação. Exige e-mail verificado e no máximo uma empresa pendente por pessoa.
  */
 export async function createCompany(ctx, input) {
@@ -72,6 +74,7 @@ export async function createCompany(ctx, input) {
     await repo.insertUsage(company.id);
     const membership = await createOwnerMembership(client, company.id, ctx.userId);
     const subscription = await startSubscription(client, company.id);
+    await createDocumentDefaults(client, company.id, ctx.userId);
     await recordAudit(client, ctx, {
       companyId: company.id,
       action: 'company.created',

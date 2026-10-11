@@ -10,6 +10,10 @@ function ipKey(req) {
   return ipKeyGenerator(req.clientIp, 56);
 }
 
+function userKey(req) {
+  return req.user ? `user:${req.user.id}` : ipKey(req);
+}
+
 function passthrough(_req, _res, next) {
   next();
 }
@@ -46,5 +50,8 @@ export function createRateLimiters({ enabled }) {
     // Cadastro, recuperação/redefinição de senha e verificação de e-mail.
     auth: make({ windowMs: 15 * MINUTE, limit: 10 }),
     refresh: make({ windowMs: 15 * MINUTE, limit: 60 }),
+    // Por usuário autenticado (rotas atrás do tenantRouter): envio em lote é normal, abuso não.
+    uploadIntents: make({ windowMs: 60 * MINUTE, limit: 200, keyGenerator: userKey }),
+    downloadUrls: make({ windowMs: 60 * MINUTE, limit: 600, keyGenerator: userKey }),
   };
 }
