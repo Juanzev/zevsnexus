@@ -6,7 +6,7 @@ import { expectNoHorizontalScroll, login, uniqueEmail } from './helpers.js';
 
 const WIDTHS = [320, 375, 1280];
 const PUBLIC_ROUTES = ['/login', '/cadastro', '/recuperar-senha', '/redefinir-senha', '/verificar-email', '/rota-inexistente'];
-const APP_ROUTES = ['/app', '/app/empresa', '/app/configuracoes'];
+const APP_ROUTES = ['/app', '/app/empresa', '/app/configuracoes', '/app/documentos', '/app/documentos?aba=lixeira'];
 
 async function visitAll(page, routes) {
   for (const route of routes) {
