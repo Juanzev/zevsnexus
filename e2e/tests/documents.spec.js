@@ -87,7 +87,7 @@ test('envio, detalhe, edição, versões, download, favorito, mover e lixeira', 
 
   // Mover para a pasta Empresa.
   await page.getByRole('button', { name: 'Mover' }).click();
-  await page.locator('dialog[open]').getByLabel('Pasta').selectOption({ label: '   Empresa' });
+  await page.locator('dialog[open]').getByLabel('Pasta').selectOption({ label: `${String.fromCharCode(0xa0).repeat(3)}Empresa` });
   await page.locator('dialog[open]').getByRole('button', { name: 'Mover' }).click();
   await expect(page.getByText('Documento movido.')).toBeVisible();
   await expect(main.getByRole('link', { name: 'Empresa' })).toBeVisible();
