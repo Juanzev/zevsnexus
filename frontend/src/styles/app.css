@@ -140,8 +140,79 @@
     @apply m-auto w-[min(100%-2rem,28rem)] rounded-2xl border border-slate-200 bg-white p-6 shadow-xl backdrop:bg-slate-900/40;
   }
 
+  /* ---------- painel: sidebar (desktop) e barra inferior (celular) — pág. 10 e Padrões visuais ---------- */
+  .sidebar {
+    @apply hidden border-r border-slate-200 bg-white px-4 py-6 lg:sticky lg:top-0 lg:flex lg:h-dvh lg:flex-col;
+  }
+
+  .nav-link {
+    @apply flex min-h-11 cursor-pointer items-center gap-3 rounded-xl px-3 text-left text-sm font-medium text-slate-700 hover:bg-slate-100 aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary;
+  }
+
+  /* No celular, respiro no fim da página para a barra inferior não tampar o conteúdo. */
+  .app-main {
+    @apply mx-auto w-full max-w-5xl px-4 pt-6 pb-28 sm:pt-8 lg:pb-10;
+  }
+
+  .bottom-bar-wrapper {
+    @apply pointer-events-none fixed inset-x-0 z-[35] flex justify-center px-3;
+    bottom: calc(env(safe-area-inset-bottom) + 10px);
+  }
+
+  /* O desfoque vem das utilities backdrop-blur-[18px] backdrop-saturate-[1.8] no HTML:
+     uma @utility própria com backdrop-filter perde a versão sem prefixo no minificador. */
+  .bottom-bar {
+    @apply pointer-events-auto flex w-full max-w-md items-stretch gap-1 rounded-[28px] border border-white/60 bg-white/75 p-1 shadow-[0_10px_30px_rgba(0,0,0,0.18)];
+  }
+
+  .bottom-bar-item {
+    @apply flex min-h-[50px] min-w-0 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-[22px] text-[11px] font-medium text-slate-600 aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary;
+  }
+
+  .bottom-bar-item span {
+    @apply max-w-full truncate px-1;
+  }
+
+  .sheet {
+    @apply mx-auto mt-auto mb-0 w-full max-w-md rounded-t-3xl border border-slate-200 bg-white p-4 shadow-xl backdrop:bg-slate-900/40;
+    padding-bottom: calc(env(safe-area-inset-bottom) + 16px);
+  }
+
+  .badge {
+    @apply inline-flex items-center rounded-full px-2 py-0.5 text-xs font-medium whitespace-nowrap;
+  }
+
+  .badge-green {
+    @apply bg-green-50 text-green-800;
+  }
+
+  .badge-amber {
+    @apply bg-amber-50 text-amber-800;
+  }
+
+  .badge-red {
+    @apply bg-red-50 text-red-800;
+  }
+
+  .badge-slate {
+    @apply bg-slate-100 text-slate-700;
+  }
+
+  .badge-primary {
+    @apply bg-primary/10 text-primary;
+  }
+
+  .tabs {
+    @apply flex gap-1 overflow-x-auto rounded-xl bg-slate-100 p-1;
+  }
+
+  .tab {
+    @apply flex min-h-10 shrink-0 items-center rounded-lg px-3 text-sm font-medium whitespace-nowrap text-slate-600 aria-selected:bg-white aria-selected:text-slate-900 aria-selected:shadow-xs;
+  }
+
+  /* Toasts acima da barra inferior no celular. */
   .toasts {
-    @apply pointer-events-none fixed inset-x-0 bottom-4 z-50 flex flex-col items-center gap-2 px-4;
+    @apply pointer-events-none fixed inset-x-0 bottom-24 z-50 flex flex-col items-center gap-2 px-4 lg:bottom-4;
   }
 
   .toast {

@@ -1,19 +1,88 @@
-// Início do painel na F1: conta, confirmação de e-mail e segurança da sessão.
-// O dashboard administrativo substitui esta tela a partir da F2.
-import { ConfirmDialog } from '../components/confirm-dialog.js';
+// Início (F2): o que falta para deixar a empresa pronta e o que vem a seguir.
+// O dashboard administrativo (pendências financeiras, notas, documentos) cresce a cada fase.
+import { errorState, loadingState } from '../components/states.js';
 import { toast } from '../components/toast.js';
-import { html } from '../lib/html.js';
+import { html, setContent } from '../lib/html.js';
 import { icon } from '../lib/icons.js';
 import { firstName } from '../lib/text.js';
 import { api } from '../services/api.js';
-import { getUser, logoutEverywhere } from '../services/session.js';
+import { getUser } from '../services/session.js';
+import { can, currentContext } from '../services/tenant.js';
 
 function verificationBanner() {
-  return html`<section class="alert alert-warning flex-col items-start gap-3 sm:flex-row sm:items-center" data-verify-banner>
+  return html`<section class="alert alert-warning flex-col items-start gap-3 sm:flex-row sm:items-center">
     <span class="flex items-start gap-2">${icon('mail', 'mt-0.5 size-5 shrink-0')}
-      <span><strong>Confirme seu e-mail.</strong> Enviamos um link quando você criou a conta. A confirmação será
-        necessária para ativar a sua empresa.</span></span>
+      <span><strong>Confirme seu e-mail.</strong> Enviamos um link quando você criou a conta.</span></span>
     <button type="button" class="btn btn-secondary btn-sm shrink-0 sm:ml-auto" data-action="resend">Reenviar e-mail</button>
+  </section>`;
+}
+
+/** Passos de configuração calculados a partir dos dados reais da empresa. */
+function setupSteps(company, contacts) {
+  return [
+    {
+      done: Boolean(company.cnpj && company.address.city),
+      title: 'Dados da empresa',
+      text: 'CNPJ e endereço.',
+    },
+    {
+      done: Boolean(company.email || company.phone),
+      title: 'Contato da empresa',
+      text: 'E-mail ou telefone para recados e documentos.',
+    },
+    {
+      done: contacts.some((contact) => contact.is_responsible),
+      title: 'Responsáveis',
+      text: 'Quem responde pela empresa (sócios, administradores).',
+    },
+  ];
+}
+
+function setupCard(steps) {
+  const pending = steps.filter((step) => !step.done).length;
+  if (pending === 0) {
+    return html`<section class="card flex items-center gap-3">
+      ${icon('circle-check', 'size-6 shrink-0 text-green-600')}
+      <p class="text-sm text-slate-700"><strong>Cadastro completo.</strong> Os dados da empresa estão em dia.</p>
+    </section>`;
+  }
+  return html`<section class="card">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h2 class="text-base font-semibold text-slate-900">Primeiros passos</h2>
+      <span class="text-sm text-slate-500">${steps.length - pending} de ${steps.length}</span>
+    </div>
+    <ul class="mt-4 space-y-3">
+      ${steps.map(
+        (step) => html`<li class="flex items-start gap-3">
+          ${step.done ? icon('circle-check', 'mt-0.5 size-5 shrink-0 text-green-600') : icon('circle', 'mt-0.5 size-5 shrink-0 text-slate-300')}
+          <span class="min-w-0"><span class="block text-sm font-medium ${step.done ? 'text-slate-500 line-through' : 'text-slate-900'}">${step.title}</span>
+            <span class="block text-sm text-slate-500">${step.text}</span></span>
+        </li>`,
+      )}
+    </ul>
+    <a href="/app/empresa" class="btn btn-primary btn-sm mt-5">Completar os dados</a>
+  </section>`;
+}
+
+const UPCOMING = [
+  { title: 'Documentos', text: 'Pastas, versões e busca de todos os arquivos.', icon: () => icon('folder-open', 'size-5') },
+  { title: 'Financeiro', text: 'Despesas, pagamentos, comprovantes e vencimentos.', icon: () => icon('wallet', 'size-5') },
+  { title: 'Notas fiscais', text: 'Notas emitidas, anexos e recebimento.', icon: () => icon('receipt-text', 'size-5') },
+  { title: 'Planilhas', text: 'Planilhas em uso, por ano e arquivadas.', icon: () => icon('sheet', 'size-5') },
+];
+
+function upcomingCard() {
+  return html`<section class="card">
+    <h2 class="text-base font-semibold text-slate-900">Em breve na sua central</h2>
+    <ul class="mt-4 grid gap-3 min-[480px]:grid-cols-2">
+      ${UPCOMING.map(
+        (item) => html`<li class="flex min-w-0 items-start gap-3 rounded-xl bg-slate-50 p-3">
+          <span class="grid size-9 shrink-0 place-items-center rounded-lg bg-white text-primary shadow-xs">${item.icon()}</span>
+          <span class="min-w-0"><span class="block text-sm font-medium text-slate-900">${item.title}</span>
+            <span class="block text-sm text-slate-500">${item.text}</span></span>
+        </li>`,
+      )}
+    </ul>
   </section>`;
 }
 
@@ -24,29 +93,15 @@ export default {
     const user = getUser();
     return html`
       <h1 class="text-2xl font-bold tracking-tight text-slate-900">Olá, ${firstName(user.name)}!</h1>
-      <p class="mt-1 text-slate-600">Bem-vindo ao ZEVS Nexus.</p>
+      <p class="mt-1 text-slate-600">${currentContext()?.company.name}</p>
       <div class="mt-6 space-y-4">
         ${user.email_verified ? '' : verificationBanner()}
-        <section class="card">
-          <h2 class="text-base font-semibold text-slate-900">Sua conta</h2>
-          <dl class="mt-3 grid gap-3 text-sm sm:grid-cols-2">
-            <div class="min-w-0"><dt class="text-slate-500">Nome</dt><dd class="truncate font-medium">${user.name}</dd></div>
-            <div class="min-w-0"><dt class="text-slate-500">E-mail</dt><dd class="truncate font-medium">${user.email}</dd></div>
-          </dl>
-        </section>
-        <section class="card">
-          <h2 class="text-base font-semibold text-slate-900">Segurança</h2>
-          <p class="mt-1 text-sm text-slate-600">Perdeu um aparelho ou entrou num computador que não é seu? Encerre todas as sessões abertas.</p>
-          <button type="button" class="btn btn-secondary btn-sm mt-4 w-full sm:w-auto" data-action="logout-all">${icon('monitor-smartphone', 'size-4')} Sair de todos os dispositivos</button>
-        </section>
-        <section class="card border-dashed bg-slate-50/60">
-          <h2 class="text-base font-semibold text-slate-900">Em breve</h2>
-          <p class="mt-1 text-sm text-slate-600">Empresa, documentos, financeiro, planilhas e notas fiscais em uma central única.</p>
-        </section>
+        <div data-setup>${can('company.view') ? loadingState('Conferindo o cadastro…') : ''}</div>
+        ${upcomingCard()}
       </div>`;
   },
 
-  mount(root, { navigate }) {
+  mount(root) {
     root.querySelector('[data-action="resend"]')?.addEventListener('click', async (event) => {
       const button = event.currentTarget;
       button.disabled = true;
@@ -62,20 +117,15 @@ export default {
       }
     });
 
-    root.querySelector('[data-action="logout-all"]').addEventListener('click', async () => {
-      const confirmed = await ConfirmDialog.ask({
-        title: 'Sair de todos os dispositivos?',
-        message: 'Todas as sessões abertas, inclusive esta, serão encerradas. Você vai precisar entrar de novo.',
-        confirmLabel: 'Sair de todos',
+    const setup = root.querySelector('[data-setup]');
+    if (!can('company.view')) return;
+    Promise.all([api('/company'), api('/company/contacts')])
+      .then(([profile, contacts]) => {
+        if (!setup.isConnected) return;
+        setContent(setup, setupCard(setupSteps(profile.data.company, contacts.data.contacts)));
+      })
+      .catch((err) => {
+        if (setup.isConnected) setContent(setup, errorState({ message: err.message }));
       });
-      if (!confirmed) return;
-      try {
-        await logoutEverywhere();
-        toast('Todas as sessões foram encerradas.', { type: 'success' });
-        navigate('/login', { replace: true });
-      } catch (err) {
-        toast(err.message, { type: 'error' });
-      }
-    });
   },
 };

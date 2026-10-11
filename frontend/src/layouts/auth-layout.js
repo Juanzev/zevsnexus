@@ -12,5 +12,5 @@ export function mountAuthLayout(root) {
       </main>
     </div>`,
   );
-  return { outlet: root.querySelector('[data-outlet]') };
+  return { outlet: root.querySelector('[data-outlet]'), update() {} };
 }

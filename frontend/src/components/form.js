@@ -31,11 +31,38 @@ export function passwordField({ name, label, autocomplete, hint }) {
   </div>`;
 }
 
-export function checkboxField({ name, label }) {
+export function selectField({ name, label, options, value = '', required = true, placeholder, hint }) {
+  const id = `f-${name}`;
+  return html`<div class="field">
+    <label for="${id}" class="label">${label}</label>
+    <select id="${id}" name="${name}" class="input" ${required ? html`required aria-required="true"` : ''}
+      aria-describedby="${id}-hint ${id}-error">
+      ${placeholder !== undefined ? html`<option value="">${placeholder}</option>` : ''}
+      ${options.map(
+        (option) => html`<option value="${option.value}" ${option.value === value ? html`selected` : ''}>${option.label}</option>`,
+      )}
+    </select>
+    ${hint ? html`<p id="${id}-hint" class="hint">${hint}</p>` : ''}
+    <p id="${id}-error" class="field-error" hidden></p>
+  </div>`;
+}
+
+export function textareaField({ name, label, value = '', maxlength = 1000, hint }) {
+  const id = `f-${name}`;
+  return html`<div class="field">
+    <label for="${id}" class="label">${label}</label>
+    <textarea id="${id}" name="${name}" class="input h-auto min-h-24 py-3" maxlength="${maxlength}"
+      aria-describedby="${id}-hint ${id}-error">${value}</textarea>
+    ${hint ? html`<p id="${id}-hint" class="hint">${hint}</p>` : ''}
+    <p id="${id}-error" class="field-error" hidden></p>
+  </div>`;
+}
+
+export function checkboxField({ name, label, checked = false }) {
   const id = `f-${name}`;
   return html`<div class="field">
     <label class="flex items-start gap-3 text-sm text-slate-700">
-      <input id="${id}" name="${name}" type="checkbox" class="checkbox" aria-describedby="${id}-error">
+      <input id="${id}" name="${name}" type="checkbox" class="checkbox" aria-describedby="${id}-error" ${checked ? html`checked` : ''}>
       <span>${label}</span>
     </label>
     <p id="${id}-error" class="field-error" hidden></p>
@@ -87,8 +114,10 @@ export function showErrors(form, { message, details = [] }) {
   let firstInvalid = null;
   const unmatched = [];
   for (const detail of details) {
-    const input = form.elements.namedItem(detail.field);
-    const errorElement = input && form.querySelector(`#f-${detail.field}-error`);
+    // Campos aninhados da API (ex.: "address.cep") viram nomes de campo com "_" (ex.: "address_cep").
+    const name = String(detail.field).replace(/\./g, '_');
+    const input = form.elements.namedItem(name);
+    const errorElement = input && form.querySelector(`#f-${name}-error`);
     if (!errorElement) {
       unmatched.push(detail.message);
       continue;

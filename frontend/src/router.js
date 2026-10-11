@@ -1,17 +1,20 @@
 // Router com History API (pág. 09): URLs limpas, um index.html, telas carregadas sob demanda.
 // Links internos (<a href="/...">) são interceptados; o backend devolve o index.html em qualquer rota.
+// O layout é montado uma vez e só atualizado entre telas; remountLayout() força remontar
+// (troca de empresa, marca nova, login/logout).
 import { errorState, loadingState } from './components/states.js';
 import { guard } from './guards.js';
+import { mountAdminLayout } from './layouts/admin-layout.js';
 import { mountAppLayout } from './layouts/app-layout.js';
 import { mountAuthLayout } from './layouts/auth-layout.js';
 import { html, setContent } from './lib/html.js';
-import { matchRoute, notFoundRoute } from './routes.js';
+import { forbiddenView, matchRoute, notFoundRoute } from './routes.js';
 
-const LAYOUTS = { auth: mountAuthLayout, app: mountAppLayout };
+const LAYOUTS = { auth: mountAuthLayout, app: mountAppLayout, admin: mountAdminLayout };
 const root = () => document.getElementById('app');
 
-let currentLayout = null;
-let outlet = null;
+let layout = null;
+let layoutName = null;
 let cleanup = null;
 let renderId = 0;
 let currentRoute = null;
@@ -36,6 +39,17 @@ function context() {
   return { query: new URLSearchParams(window.location.search), navigate };
 }
 
+function showLoadError(outlet) {
+  setContent(
+    outlet,
+    errorState({
+      message: 'Verifique sua conexão. Se o problema continuar, recarregue a página.',
+      action: html`<button type="button" class="btn btn-primary" data-action="reload">Recarregar</button>`,
+    }),
+  );
+  outlet.querySelector('[data-action="reload"]').addEventListener('click', () => window.location.reload());
+}
+
 async function render() {
   const id = ++renderId;
   const route = matchRoute(window.location.pathname) ?? notFoundRoute;
@@ -44,9 +58,16 @@ async function render() {
     await navigate(route.redirect, { replace: true });
     return;
   }
-  const redirect = guard(route, window.location);
-  if (redirect) {
-    await navigate(redirect, { replace: true });
+
+  let decision;
+  try {
+    decision = await guard(route, window.location);
+  } catch {
+    decision = 'error';
+  }
+  if (id !== renderId) return;
+  if (decision && decision !== 'forbidden' && decision !== 'error') {
+    await navigate(decision, { replace: true });
     return;
   }
 
@@ -54,26 +75,25 @@ async function render() {
   cleanup = null;
   currentRoute = route;
 
-  // O layout do painel é remontado a cada troca de tela: o cabeçalho reflete o usuário atual.
-  if (route.layout !== currentLayout || route.layout === 'app') {
-    outlet = LAYOUTS[route.layout](root(), context()).outlet;
-    currentLayout = route.layout;
+  if (route.layout !== layoutName || !layout) {
+    layout = LAYOUTS[route.layout](root(), context());
+    layoutName = route.layout;
+  } else {
+    layout.update(window.location.pathname);
+  }
+  const { outlet } = layout;
+
+  if (decision === 'error') {
+    showLoadError(outlet);
+    return;
   }
   setContent(outlet, loadingState());
 
   let view;
   try {
-    view = (await route.view()).default;
+    view = (await (decision === 'forbidden' ? forbiddenView() : route.view())).default;
   } catch {
-    if (id !== renderId) return;
-    setContent(
-      outlet,
-      errorState({
-        message: 'Verifique sua conexão. Se o problema continuar, recarregue a página.',
-        action: html`<button type="button" class="btn btn-primary" data-action="reload">Recarregar</button>`,
-      }),
-    );
-    outlet.querySelector('[data-action="reload"]').addEventListener('click', () => window.location.reload());
+    if (id === renderId) showLoadError(outlet);
     return;
   }
   // Uma navegação mais nova começou enquanto esta tela carregava.
@@ -112,4 +132,9 @@ export function startRouter() {
 /** Reavalia a rota atual (ex.: a sessão caiu em outra aba). */
 export function refreshRoute() {
   return render();
+}
+
+/** Remonta o layout na próxima renderização (empresa, marca ou usuário mudaram). */
+export function remountLayout() {
+  layout = null;
 }
