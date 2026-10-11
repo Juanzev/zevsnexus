@@ -89,13 +89,14 @@ describe('configurações (fuso e cor da marca)', () => {
     expect((await api(app).get('/api/v1/company/settings').set(tenant.headers('owner'))).body.data.settings).toEqual({
       timezone: 'America/Sao_Paulo',
       primary_color: '#1d4ed8',
+      upcoming_window_days: 7,
     });
 
     const res = await api(app)
       .patch('/api/v1/company/settings')
       .set(tenant.headers('owner'))
       .send({ timezone: 'America/Manaus', primary_color: '#0F766E' });
-    expect(res.body.data.settings).toEqual({ timezone: 'America/Manaus', primary_color: '#0f766e' });
+    expect(res.body.data.settings).toEqual({ timezone: 'America/Manaus', primary_color: '#0f766e', upcoming_window_days: 7 });
 
     const ctx = await api(app).get('/api/v1/company/context').set(tenant.headers('owner'));
     expect(ctx.body.data.company.timezone).toBe('America/Manaus');

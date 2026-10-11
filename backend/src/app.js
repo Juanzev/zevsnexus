@@ -13,6 +13,7 @@ import { requestId } from './middlewares/request-id.js';
 import { createAuthRouter, createMeRouter } from './modules/auth/auth.routes.js';
 import { createCompanyRouter } from './modules/companies/companies.routes.js';
 import { createOnboardingRouter } from './modules/companies/onboarding.routes.js';
+import { createDashboardRouter } from './modules/dashboard/dashboard.routes.js';
 import {
   createDocumentsRouter,
   createDocumentTypesRouter,
@@ -21,6 +22,12 @@ import {
   createTrashRouter,
 } from './modules/documents/documents.routes.js';
 import { createFilesRouter } from './modules/files/files.routes.js';
+import {
+  createExpensePaymentsRouter,
+  createExpensesRouter,
+  createFinanceCategoriesRouter,
+} from './modules/finance/finance.routes.js';
+import { createPartiesRouter } from './modules/parties/parties.routes.js';
 import { createPlatformRouter } from './modules/platform/platform.routes.js';
 import { createDevStorageRouter } from './modules/storage/dev-storage.routes.js';
 import { storage, usesDevStorage } from './modules/storage/storage.service.js';
@@ -94,6 +101,11 @@ export function createApp({ rateLimits = !env.isTest, serveFrontend = env.SERVE_
   app.use('/api/v1/folders', createFoldersRouter());
   app.use('/api/v1/document-types', createDocumentTypesRouter());
   app.use('/api/v1/tags', createTagsRouter());
+  app.use('/api/v1/parties', createPartiesRouter());
+  app.use('/api/v1/expenses', createExpensesRouter());
+  app.use('/api/v1/expense-payments', createExpensePaymentsRouter());
+  app.use('/api/v1/finance-categories', createFinanceCategoriesRouter());
+  app.use('/api/v1/dashboard', createDashboardRouter());
   app.use('/api/v1/admin', createPlatformRouter());
   app.use('/api', apiNotFound);
 

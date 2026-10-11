@@ -68,15 +68,19 @@ export function documentTypesRepository(db) {
 
 export function tagsRepository(db) {
   return {
-    /** Autocompletar: tags que contêm o texto, as mais usadas primeiro. */
+    /** Autocompletar: tags que contêm o texto, as mais usadas (documentos + despesas) primeiro. */
     async search(companyId, query, limit) {
       const { rows } = await db.query(
-        `SELECT t.id, t.name,
-                (SELECT count(*) FROM document_tags x JOIN documents d ON d.company_id = x.company_id AND d.id = x.document_id
-                  WHERE x.company_id = t.company_id AND x.tag_id = t.id AND d.deleted_at IS NULL) AS document_count
-           FROM tags t
-          WHERE t.company_id = $1 AND ($2::text IS NULL OR f_unaccent(lower(t.name)) LIKE f_unaccent(lower($2)))
-          ORDER BY document_count DESC, lower(t.name)
+        `SELECT id, name, document_count, expense_count FROM (
+           SELECT t.id, t.name,
+                  (SELECT count(*) FROM document_tags x JOIN documents d ON d.company_id = x.company_id AND d.id = x.document_id
+                    WHERE x.company_id = t.company_id AND x.tag_id = t.id AND d.deleted_at IS NULL) AS document_count,
+                  (SELECT count(*) FROM expense_tags x
+                    WHERE x.company_id = t.company_id AND x.tag_id = t.id) AS expense_count
+             FROM tags t
+            WHERE t.company_id = $1 AND ($2::text IS NULL OR f_unaccent(lower(t.name)) LIKE f_unaccent(lower($2)))
+         ) AS counted
+          ORDER BY document_count + expense_count DESC, lower(name)
           LIMIT $3`,
         [companyId, query ? likePattern(query) : null, limit],
       );

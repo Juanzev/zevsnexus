@@ -123,11 +123,14 @@ export function normalizeTagNames(names = []) {
   return result;
 }
 
+/** Garante as tags da empresa (criadas ao marcar) e devolve os ids. Serve a documentos e despesas (D11). */
+export function ensureTags(client, companyId, names) {
+  return tagsRepository(client).ensure(companyId, normalizeTagNames(names));
+}
+
 /** Substitui as tags do documento (criando as que faltam). */
 export async function setDocumentTags(client, companyId, documentId, names) {
-  const repo = tagsRepository(client);
-  const ids = await repo.ensure(companyId, normalizeTagNames(names));
-  await repo.replaceDocumentTags(companyId, documentId, ids);
+  await tagsRepository(client).replaceDocumentTags(companyId, documentId, await ensureTags(client, companyId, names));
 }
 
 export async function createDefaultTypes(client, companyId, userId) {

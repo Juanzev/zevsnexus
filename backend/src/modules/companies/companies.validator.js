@@ -56,6 +56,8 @@ export const settingsPatchBody = z
   .object({
     timezone: timezone.optional(),
     primary_color: hexColor.optional(),
+    // Aba "Próximas" do Financeiro: de hoje até hoje + N dias.
+    upcoming_window_days: z.number().int().min(1, 'Mínimo de 1 dia.').max(60, 'Máximo de 60 dias.').optional(),
   })
   .strict();
 

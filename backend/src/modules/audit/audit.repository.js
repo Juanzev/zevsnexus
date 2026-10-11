@@ -23,6 +23,20 @@ export function auditRepository(db = pool) {
       );
     },
 
+    /** Histórico de uma entidade da empresa (tela de detalhe), com o nome de quem agiu. */
+    async listForEntity(companyId, entityType, entityId, limit) {
+      const { rows } = await db.query(
+        `SELECT a.action, a.created_at, a.metadata, a.actor_type, u.name AS actor_name
+           FROM audit_logs a
+           LEFT JOIN users u ON u.id = a.actor_user_id
+          WHERE a.company_id = $1 AND a.entity_type = $2 AND a.entity_id = $3
+          ORDER BY a.created_at DESC, a.id DESC
+          LIMIT $4`,
+        [companyId, entityType, entityId, limit],
+      );
+      return rows;
+    },
+
     /** Quantos eventos `action` sobre a entidade nos últimos `seconds` segundos. */
     async countRecent({ action, entityId, seconds }) {
       const { rows } = await db.query(

@@ -1,6 +1,15 @@
 // Peças de validação reaproveitáveis (Zod 4). Campo opcional vazio ("") vira null.
 import * as z from 'zod';
-import { isValidCnpj, isValidPhone, normalizeCep, normalizeCnpj, normalizePhone, UFS } from './br.js';
+import {
+  isValidCnpj,
+  isValidCpf,
+  isValidPhone,
+  normalizeCep,
+  normalizeCnpj,
+  normalizeCpf,
+  normalizePhone,
+  UFS,
+} from './br.js';
 import { isValidTimezone } from './timezones.js';
 
 /** Campo opcional que aceita null e trata texto vazio como null (limpar o campo). */
@@ -20,6 +29,11 @@ export const cnpj = z
   .string()
   .transform(normalizeCnpj)
   .refine(isValidCnpj, 'CNPJ inválido. Confira os números.');
+
+export const cpf = z
+  .string()
+  .transform(normalizeCpf)
+  .refine(isValidCpf, 'CPF inválido. Confira os números.');
 
 export const phone = z
   .string()
@@ -62,3 +76,10 @@ export const queryBoolean = z.enum(['true', 'false']).transform((value) => value
 
 /** Data de calendário AAAA-MM-DD (vencimento, validade): sem hora e sem fuso. */
 export const calendarDate = z.iso.date({ error: 'Data inválida. Use AAAA-MM-DD.' });
+
+/** Valor em centavos (inteiro; nunca float). Teto: R$ 999.999.999.999,99. */
+export const cents = z
+  .number({ error: 'Informe o valor.' })
+  .int('Valor em centavos inválido.')
+  .min(1, 'O valor precisa ser maior que zero.')
+  .max(99_999_999_999_999, 'Valor alto demais.');

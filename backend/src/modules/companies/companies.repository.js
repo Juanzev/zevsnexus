@@ -103,6 +103,15 @@ export function companiesRepository(db = pool) {
       );
     },
 
+    async findUpcomingWindow(companyId) {
+      const { rows } = await db.query('SELECT upcoming_window_days FROM company_settings WHERE company_id = $1', [companyId]);
+      return rows[0]?.upcoming_window_days ?? 7;
+    },
+
+    async updateUpcomingWindow(companyId, days) {
+      await db.query('UPDATE company_settings SET upcoming_window_days = $2 WHERE company_id = $1', [companyId, days]);
+    },
+
     async findBranding(companyId) {
       const { rows } = await db.query('SELECT primary_color FROM company_branding WHERE company_id = $1', [
         companyId,

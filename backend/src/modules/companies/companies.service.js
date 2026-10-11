@@ -5,6 +5,7 @@ import { setTenant, withTenant, withTransaction } from '../../shared/db.js';
 import { AuthorizationError, ConflictError, NotFoundError } from '../../shared/errors.js';
 import { auditChanges, recordAudit } from '../audit/audit.service.js';
 import { createDefaults as createDocumentDefaults } from '../documents/documents.service.js';
+import { createDefaultCategories } from '../finance/categories.service.js';
 import { createOwnerMembership } from '../memberships/memberships.service.js';
 import { startSubscription } from '../plans/plans.service.js';
 import { companiesRepository, EDITABLE_PROFILE_COLUMNS } from './companies.repository.js';
@@ -46,7 +47,7 @@ function versionConflict(currentVersion) {
 
 /**
  * Onboarding (pág. 03): empresa `pending` + marca + uso + vínculo de proprietário + assinatura +
- * pastas, tipos de documento e configurações sugeridos (F3),
+ * pastas, tipos de documento e configurações sugeridos (F3) + categorias financeiras (F4),
  * numa transação. Exige e-mail verificado e no máximo uma empresa pendente por pessoa.
  */
 export async function createCompany(ctx, input) {
@@ -75,6 +76,7 @@ export async function createCompany(ctx, input) {
     const membership = await createOwnerMembership(client, company.id, ctx.userId);
     const subscription = await startSubscription(client, company.id);
     await createDocumentDefaults(client, company.id, ctx.userId);
+    await createDefaultCategories(client, company.id, ctx.userId);
     await recordAudit(client, ctx, {
       companyId: company.id,
       action: 'company.created',
@@ -155,7 +157,11 @@ export function getSettings(ctx) {
     const repo = companiesRepository(client);
     const company = await repo.findProfile(ctx.companyId);
     const branding = await repo.findBranding(ctx.companyId);
-    return { timezone: company.timezone, primary_color: branding.primary_color };
+    return {
+      timezone: company.timezone,
+      primary_color: branding.primary_color,
+      upcoming_window_days: await repo.findUpcomingWindow(ctx.companyId),
+    };
   });
 }
 
@@ -164,14 +170,21 @@ export function updateSettings(ctx, input) {
     const repo = companiesRepository(client);
     const company = await repo.findProfile(ctx.companyId, { forUpdate: true });
     const branding = await repo.findBranding(ctx.companyId);
-    const before = { timezone: company.timezone, primary_color: branding.primary_color };
+    const before = {
+      timezone: company.timezone,
+      primary_color: branding.primary_color,
+      upcoming_window_days: await repo.findUpcomingWindow(ctx.companyId),
+    };
     const after = { ...before, ...input };
 
     if (after.timezone !== before.timezone) await repo.updateTimezone(ctx.companyId, after.timezone, { userId: ctx.userId });
     if (after.primary_color !== before.primary_color) {
       await repo.updateBranding(ctx.companyId, after.primary_color, { userId: ctx.userId });
     }
-    const changes = auditChanges(before, after, { fields: ['timezone', 'primary_color'] });
+    if (after.upcoming_window_days !== before.upcoming_window_days) {
+      await repo.updateUpcomingWindow(ctx.companyId, after.upcoming_window_days);
+    }
+    const changes = auditChanges(before, after, { fields: ['timezone', 'primary_color', 'upcoming_window_days'] });
     if (changes) {
       await recordAudit(client, ctx, { action: 'settings.updated', entityType: 'company', entityId: ctx.companyId, metadata: { changes } });
     }

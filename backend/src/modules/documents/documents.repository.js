@@ -201,6 +201,18 @@ export function documentsRepository(db) {
       ]);
     },
 
+    /** Vencidos e vencendo (até `days` dias) entre os ativos — calculado, nunca gravado. */
+    async expiryCounts(companyId, today, days) {
+      const { rows } = await db.query(
+        `SELECT count(*) FILTER (WHERE expires_on < $2::date) AS expired_count,
+                count(*) FILTER (WHERE expires_on BETWEEN $2::date AND $2::date + $3::int) AS expiring_count
+           FROM documents
+          WHERE company_id = $1 AND deleted_at IS NULL AND archived_at IS NULL AND expires_on IS NOT NULL`,
+        [companyId, today, days],
+      );
+      return rows[0];
+    },
+
     /** Auditoria do documento (o histórico da tela), com o nome de quem agiu. */
     async history(companyId, documentId, limit) {
       const { rows } = await db.query(
