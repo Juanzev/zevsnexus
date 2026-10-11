@@ -110,6 +110,16 @@ export function companiesRepository(db = pool) {
       return rows[0] ?? null;
     },
 
+    /** Pastas padrão da empresa (company_settings), para os atalhos da SPA. */
+    async findDefaultFolders(companyId) {
+      const { rows } = await db.query(
+        `SELECT company_folder_id, receipts_folder_id, invoices_folder_id, spreadsheets_folder_id
+           FROM company_settings WHERE company_id = $1`,
+        [companyId],
+      );
+      return rows[0] ?? null;
+    },
+
     async updateBranding(companyId, primaryColor, { userId }) {
       await db.query('UPDATE company_branding SET primary_color = $2, updated_by = $3 WHERE company_id = $1', [
         companyId,

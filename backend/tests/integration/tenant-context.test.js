@@ -19,6 +19,8 @@ describe('contexto do tenant (X-Company-Id)', () => {
       membership: { id: tenant.members.viewer.membershipId, roles: ['viewer'] },
       features: ['multiple_users', 'spreadsheet_import'],
       branding: { primary_color: '#1d4ed8' },
+      // Empresa sem as pastas sugeridas (factory): atalhos vazios.
+      document_folders: { company: null, receipts: null, invoices: null, spreadsheets: null },
     });
     expect(res.body.data.permissions).toContain('company.view');
     expect(res.body.data.permissions).not.toContain('company.manage');

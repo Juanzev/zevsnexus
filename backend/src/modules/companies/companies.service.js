@@ -92,6 +92,7 @@ export function getContext(ctx, tenant) {
     const repo = companiesRepository(client);
     const company = await repo.findProfile(ctx.companyId);
     const branding = await repo.findBranding(ctx.companyId);
+    const folders = await repo.findDefaultFolders(ctx.companyId);
     return {
       company: {
         id: company.id,
@@ -104,6 +105,13 @@ export function getContext(ctx, tenant) {
       permissions: [...tenant.permissions].sort(),
       features: [...tenant.features].sort(),
       branding: { primary_color: branding?.primary_color ?? null },
+      // Atalhos para as pastas padrão (null = raiz). Só ids: o conteúdo continua exigindo documents.view.
+      document_folders: {
+        company: folders?.company_folder_id ?? null,
+        receipts: folders?.receipts_folder_id ?? null,
+        invoices: folders?.invoices_folder_id ?? null,
+        spreadsheets: folders?.spreadsheets_folder_id ?? null,
+      },
     };
   });
 }
