@@ -42,6 +42,11 @@ function putFile({ url, method, headers }, file, onProgress) {
   });
 }
 
+/** Intenção + PUT direto no storage. Devolve o file_id, que a operação seguinte confirma. */
+export async function uploadFile(file, { onProgress } = {}) {
+  return sendToStorage(file, onProgress);
+}
+
 async function sendToStorage(file, onProgress) {
   const { data } = await api('/files/upload-intents', {
     method: 'POST',

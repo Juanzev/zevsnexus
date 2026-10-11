@@ -7,7 +7,9 @@ import { can } from '../services/tenant.js';
 
 export const NAV_ITEMS = Object.freeze([
   { path: '/app', label: 'Início', icon: () => icon('house'), permission: 'dashboard.view' },
+  { path: '/app/financeiro', label: 'Financeiro', icon: () => icon('wallet'), permission: 'finance.view' },
   { path: '/app/documentos', label: 'Documentos', icon: () => icon('folder-open'), permission: 'documents.view' },
+  { path: '/app/prestadores', label: 'Prestadores', icon: () => icon('users'), permission: 'parties.view' },
   { path: '/app/empresa', label: 'Empresa', icon: () => icon('building-2'), permission: 'company.view' },
   // `short`: rótulo da barra inferior, onde cabem ~10 caracteres a 375 px.
   { path: '/app/configuracoes', label: 'Configurações', short: 'Ajustes', icon: () => icon('settings') },

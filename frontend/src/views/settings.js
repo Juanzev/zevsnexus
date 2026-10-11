@@ -58,6 +58,14 @@ function companySettingsForm(settings) {
       <p id="f-primary_color-hint" class="hint" data-contrast>Usada nos botões e destaques do sistema.</p>
       <p id="f-primary_color-error" class="field-error" hidden></p>
     </div>
+    ${field({
+      name: 'upcoming_window_days',
+      label: 'Financeiro: a aba "Próximas" mostra quantos dias à frente?',
+      type: 'number',
+      inputmode: 'numeric',
+      value: String(settings.upcoming_window_days ?? 7),
+      hint: 'De 1 a 60 dias a partir de hoje.',
+    })}
     <button type="submit" class="btn btn-primary">Salvar configurações</button>
   </form>`;
 }
@@ -108,7 +116,9 @@ function bindCompanyForm(root) {
     clearErrors(form);
     const done = setBusy(form.querySelector('[type="submit"]'), 'Salvando…');
     try {
-      const { data } = await api('/company/settings', { method: 'PATCH', body: formValues(form) });
+      const values = formValues(form);
+      const body = { ...values, upcoming_window_days: Number.parseInt(values.upcoming_window_days, 10) };
+      const { data } = await api('/company/settings', { method: 'PATCH', body });
       patchContext({ branding: { primary_color: data.settings.primary_color }, company: { timezone: data.settings.timezone } });
       toast('Configurações salvas.', { type: 'success' });
     } catch (err) {
@@ -201,6 +211,88 @@ function mountDocumentTypes(slot) {
   load();
 }
 
+// ---------- categorias financeiras ----------
+
+function categoriesList(categories) {
+  if (categories.length === 0) return emptyState({ title: 'Nenhuma categoria', message: 'Crie categorias para organizar as despesas.' });
+  return html`<ul class="divide-y divide-slate-100">
+    ${categories.map(
+      (category) => html`<li class="flex items-center justify-between gap-3 py-2">
+        <span class="min-w-0"><span class="block truncate text-sm font-medium text-slate-900">${category.name}</span>
+          <span class="block text-xs text-slate-500">${category.expense_count === 1 ? '1 despesa' : `${category.expense_count} despesas`}</span></span>
+        <span class="flex shrink-0 gap-1">
+          <button type="button" class="btn btn-ghost btn-sm" data-action="rename-category" data-id="${category.id}" aria-label="Renomear ${category.name}">${icon('pencil', 'size-4')}</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-action="archive-category" data-id="${category.id}" aria-label="Arquivar ${category.name}">${icon('archive', 'size-4')}</button>
+        </span>
+      </li>`,
+    )}
+  </ul>`;
+}
+
+function mountCategories(slot) {
+  async function load() {
+    try {
+      const { data } = await api('/finance-categories?kind=expense');
+      if (!slot.isConnected) return;
+      setContent(slot, categoriesList(data.categories));
+      bind(data.categories);
+    } catch (err) {
+      if (slot.isConnected) setContent(slot, errorState({ message: err.message }));
+    }
+  }
+
+  function bind(categories) {
+    for (const button of slot.querySelectorAll('[data-action="rename-category"]')) {
+      button.addEventListener('click', async () => {
+        const category = categories.find((item) => item.id === button.dataset.id);
+        const saved = await openFormModal({
+          title: 'Renomear categoria',
+          body: field({ name: 'name', label: 'Nome', value: category.name }),
+          onSubmit: (form) => api(`/finance-categories/${category.id}`, { method: 'PATCH', body: { name: form.elements.name.value } }),
+        });
+        if (saved) {
+          toast('Categoria renomeada.', { type: 'success' });
+          load();
+        }
+      });
+    }
+    for (const button of slot.querySelectorAll('[data-action="archive-category"]')) {
+      button.addEventListener('click', async () => {
+        const category = categories.find((item) => item.id === button.dataset.id);
+        const confirmed = await ConfirmDialog.ask({
+          title: `Arquivar a categoria “${category.name}”?`,
+          message: 'Ela deixa de aparecer para despesas novas. As despesas que já usam a categoria continuam com ela.',
+          confirmLabel: 'Arquivar',
+          danger: false,
+        });
+        if (!confirmed) return;
+        try {
+          await api(`/finance-categories/${category.id}/archive`, { method: 'POST', body: {} });
+          toast('Categoria arquivada.', { type: 'success' });
+          load();
+        } catch (err) {
+          toast(err.message, { type: 'error' });
+        }
+      });
+    }
+  }
+
+  slot.closest('section').querySelector('[data-action="add-category"]').addEventListener('click', async () => {
+    const saved = await openFormModal({
+      title: 'Nova categoria de despesa',
+      body: field({ name: 'name', label: 'Nome', hint: 'Ex.: Mão de obra, Materiais, Combustível.' }),
+      submitLabel: 'Criar',
+      onSubmit: (form) => api('/finance-categories', { method: 'POST', body: { kind: 'expense', name: form.elements.name.value } }),
+    });
+    if (saved) {
+      toast('Categoria criada.', { type: 'success' });
+      load();
+    }
+  });
+
+  load();
+}
+
 function bindAccount(root, navigate) {
   const form = root.querySelector('[data-form="password"]');
   bindPasswordToggles(form);
@@ -264,6 +356,18 @@ export default {
           : ''
       }
       ${
+        can('finance.manage')
+          ? html`<section class="card">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <h2 class="text-base font-semibold text-slate-900">Categorias de despesa</h2>
+                <button type="button" class="btn btn-secondary btn-sm" data-action="add-category">${icon('plus', 'size-4')} Nova categoria</button>
+              </div>
+              <p class="mt-1 text-sm text-slate-600">Usadas para organizar e somar as despesas no Financeiro.</p>
+              <div class="mt-3" data-categories>${loadingState()}</div>
+            </section>`
+          : ''
+      }
+      ${
         can('documents.manage')
           ? html`<section class="card">
               <div class="flex flex-wrap items-center justify-between gap-3">
@@ -280,6 +384,8 @@ export default {
 
   mount(root, { navigate }) {
     bindAccount(root, navigate);
+    const categoriesSlot = root.querySelector('[data-categories]');
+    if (categoriesSlot) mountCategories(categoriesSlot);
     const typesSlot = root.querySelector('[data-document-types]');
     if (typesSlot) mountDocumentTypes(typesSlot);
     const slot = root.querySelector('[data-company-settings]');

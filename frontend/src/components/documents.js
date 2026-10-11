@@ -105,13 +105,16 @@ export function subtreeIds(folders, rootId) {
   return ids;
 }
 
+/** Recuo por nível no <select> de pasta: espaço inseparável (o <option> descarta espaço comum). */
+const INDENT = String.fromCharCode(0xa0).repeat(3);
+
 /** Opções de <select> de pasta, com recuo por nível e a raiz no topo. */
 export function folderOptions(folders, { exclude = new Set() } = {}) {
   return [
     { value: '', label: 'Documentos (raiz)' },
     ...folderTree(folders)
       .filter((folder) => !exclude.has(folder.id))
-      .map((folder) => ({ value: folder.id, label: `${'   '.repeat(folder.depth + 1)}${folder.name}` })),
+      .map((folder) => ({ value: folder.id, label: `${INDENT.repeat(folder.depth + 1)}${folder.name}` })),
   ];
 }
 

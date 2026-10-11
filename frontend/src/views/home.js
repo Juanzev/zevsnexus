@@ -1,6 +1,7 @@
-// Início: o que falta para deixar a empresa pronta, documentos vencendo (D5.3) e o que vem a seguir.
-// O dashboard administrativo (pendências financeiras, notas) cresce a cada fase.
+// Início: indicadores financeiros do mês (D4, via /dashboard), o que falta para deixar a empresa pronta,
+// documentos vencendo (D5.3) e o que vem a seguir. O dashboard completo chega na F8.
 import { documentList } from '../components/documents.js';
+import { formatCents } from '../lib/money.js';
 import { errorState, loadingState } from '../components/states.js';
 import { toast } from '../components/toast.js';
 import { html, setContent } from '../lib/html.js';
@@ -66,10 +67,61 @@ function setupCard(steps) {
 }
 
 const UPCOMING = [
-  { title: 'Financeiro', text: 'Despesas, pagamentos, comprovantes e vencimentos.', icon: () => icon('wallet', 'size-5') },
   { title: 'Notas fiscais', text: 'Notas emitidas, anexos e recebimento.', icon: () => icon('receipt-text', 'size-5') },
   { title: 'Planilhas', text: 'Planilhas em uso, por ano e arquivadas.', icon: () => icon('sheet', 'size-5') },
 ];
+
+function indicator({ label, value, detail, href, tone }) {
+  return html`<a href="${href}" class="block min-w-0 rounded-xl border border-slate-200 bg-white p-3 hover:border-primary/40">
+    <span class="block text-xs text-slate-500">${label}</span>
+    <span class="mt-1 block truncate text-lg font-bold tabular-nums ${tone}">${value}</span>
+    <span class="block truncate text-xs text-slate-500">${detail}</span>
+  </a>`;
+}
+
+function plural(count, one, many) {
+  return count === 1 ? `1 ${one}` : `${count} ${many}`;
+}
+
+/** Bloco financeiro (só chega da API para quem tem finance.view). Definições na FASE-0, D4. */
+function financeCard(finance) {
+  return html`<section class="card">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h2 class="flex items-center gap-2 text-base font-semibold text-slate-900">${icon('wallet', 'size-5 text-primary')} Financeiro do mês</h2>
+      <a href="/app/financeiro" class="link text-sm">Abrir o Financeiro</a>
+    </div>
+    <div class="mt-4 grid grid-cols-2 gap-2 lg:grid-cols-4">
+      ${indicator({
+        label: 'A pagar vencido',
+        value: formatCents(finance.overdue.open_cents),
+        detail: plural(finance.overdue.count, 'despesa', 'despesas'),
+        href: '/app/financeiro?aba=overdue',
+        tone: finance.overdue.count > 0 ? 'text-red-700' : 'text-slate-900',
+      })}
+      ${indicator({
+        label: `Vence em ${finance.due_soon.days} dias`,
+        value: formatCents(finance.due_soon.open_cents),
+        detail: plural(finance.due_soon.count, 'despesa', 'despesas'),
+        href: '/app/financeiro?aba=upcoming',
+        tone: 'text-amber-700',
+      })}
+      ${indicator({
+        label: 'Pago no mês',
+        value: formatCents(finance.paid_in_period.amount_cents),
+        detail: plural(finance.paid_in_period.count, 'pagamento', 'pagamentos'),
+        href: '/app/financeiro?aba=paid',
+        tone: 'text-green-700',
+      })}
+      ${indicator({
+        label: 'Despesas do mês',
+        value: formatCents(finance.expenses_in_period.amount_cents),
+        detail: plural(finance.expenses_in_period.count, 'despesa', 'despesas'),
+        href: '/app/financeiro?aba=all',
+        tone: 'text-slate-900',
+      })}
+    </div>
+  </section>`;
+}
 
 /** Alerta de validade: vencidos e vencendo nos próximos 30 dias (calculado no fuso da empresa). */
 function expiringCard(documents, total) {
@@ -108,6 +160,7 @@ export default {
       <p class="mt-1 text-slate-600">${currentContext()?.company.name}</p>
       <div class="mt-6 space-y-4">
         ${user.email_verified ? '' : verificationBanner()}
+        <div data-finance>${can('finance.view') ? loadingState('Somando o mês…') : ''}</div>
         <div data-setup>${can('company.view') ? loadingState('Conferindo o cadastro…') : ''}</div>
         <div data-expiring></div>
         ${upcomingCard()}
@@ -129,6 +182,17 @@ export default {
         button.disabled = false;
       }
     });
+
+    const finance = root.querySelector('[data-finance]');
+    if (can('dashboard.view')) {
+      api('/dashboard?period=this_month')
+        .then(({ data }) => {
+          if (finance.isConnected) setContent(finance, data.finance ? financeCard(data.finance) : html``);
+        })
+        .catch((err) => {
+          if (finance.isConnected && can('finance.view')) setContent(finance, errorState({ message: err.message }));
+        });
+    }
 
     const expiring = root.querySelector('[data-expiring]');
     if (can('documents.view')) {
