@@ -504,7 +504,20 @@ StorageProvider
 - **Visões (filtros):** Em uso · Deste ano · Antigas · Arquivadas · Importadas (regras na FASE-0, D6). Ações em lote: marcar ou desmarcar "em uso", arquivar e mudar o ano.
 - **Prévia (nível 2):** leitura em streaming no servidor, só **XLSX, CSV e ODS**; abas, linhas paginadas (50 por página) e no máximo 200 colunas exibidas. Fórmulas **não** são avaliadas: aparece o valor calculado salvo no arquivo. Toda célula é renderizada como texto, com escape. **XLS legado:** só armazenamento e download.
 - **Limites de leitura:** arquivo de até 10 MB para prévia ou importação; teto de bytes descompactados, de linhas lidas, de colunas e de tempo, contra zip bomb e arquivo patológico. Estourou → 422 com a mensagem "planilha grande demais para visualizar; baixe o arquivo".
-- **Biblioteca:** escolhida na F6 com as planilhas reais. Candidatas: ExcelJS (XLSX, com leitor em streaming) e parser de CSV próprio ou `csv-parse`. Excluída: `xlsx` do npm (0.18.5, com CVEs conhecidos e correções publicadas fora do npm).
+- **Biblioteca (decidida na F6):** leitor próprio (zip pelo `zlib` com teto de descompressão + XML pelo `saxes`, sem entidades externas) para XLSX e ODS, e parser de CSV próprio. ExcelJS foi avaliada e descartada: 195 pacotes, alertas sem correção na 4.x, não lê ODS e não deixa limitar a descompressão. Excluída também: `xlsx` do npm (0.18.5, com CVEs conhecidos e correções publicadas fora do npm).
+
+#### 13.1.1 Como fica na implementação (F6)
+
+- **Planilhas de teste ("fantasma"):** sem as planilhas reais do cliente (D6.4), a F6 usa `fixtures/planilhas/` — arquivos **fictícios** salvos pelo Excel 16 e pelo LibreOffice (`gerar-planilhas.ps1`): título mesclado acima do cabeçalho, fórmulas com valor salvo, datas e moeda com formato pt-BR, várias abas, CSV "UTF-8" e CSV ANSI (Windows-1252) do Excel com `;`, ODS com as repetições de linhas e colunas vazias do LibreOffice e um `.xls` legado. Quando chegarem as reais, entram no mesmo conjunto de testes.
+- **`spreadsheets`** (migration 0012) é extensão 1:1 de `documents`: PK `(company_id, document_id)`, `in_use`, `reference_year`. A linha nasce quando o documento recebe uma versão de planilha (no envio pela Central, pela tela de Planilhas ou por nova versão); empresas existentes ganham as linhas pela migration. O ano vem de `File.lastModified` (enviado pela tela) ou, sem ele, do ano corrente da empresa.
+- **Visões:** Em uso · Deste ano · Antigas · Arquivadas · Todas. "Em uso", "Deste ano" e "Antigas" não mostram arquivadas; nenhuma mostra a lixeira. **Importadas** entra na F9, com `import_jobs`. Só aparecem documentos cuja versão atual é planilha.
+- **Ações em lote** (`POST /spreadsheets/bulk`, até 100 por vez): marcar e desmarcar "em uso", mudar o ano, arquivar e desarquivar. Cada item trava o documento e grava auditoria.
+- **Prévia** (`GET /spreadsheets/:id/preview?sheet=&page=`): a versão atual (ou `?version=`) é lida do storage **inteira**, e só se o arquivo tiver até 10 MB (conferido pelo tamanho guardado, antes de baixar). XLS → `422 PREVIEW_NOT_SUPPORTED`.
+  - **Tetos:** 50 MB descompactados por parte do zip (e 100 MB no total), 100 abas, 100.000 linhas varridas, 200 colunas exibidas, 1.000 caracteres por célula e 5 s de leitura. Estourou → `422 SPREADSHEET_TOO_LARGE` ("planilha grande demais para visualizar; baixe o arquivo"). Arquivo corrompido ou XML com entidade → `422 SPREADSHEET_UNREADABLE`.
+  - **Linhas e colunas vazias repetidas** (ODS, XLSX esparso) só viram linhas de verdade se houver conteúdo depois delas: as 16.378 colunas vazias do LibreOffice não custam nada.
+  - **Valores:** fórmulas mostram o valor salvo (nunca avaliadas); datas pelo formato da célula (`dd/mm/aaaa`, com hora se houver); moeda e porcentagem pelo formato; o resto em pt-BR. No ODS vale o texto já formatado que o próprio arquivo guarda. Toda célula sai como **texto** e a tela escapa.
+  - **CSV:** BOM UTF-8 ou UTF-16; sem BOM, UTF-8 se for válido, senão Windows-1252 (o "CSV" antigo do Excel). Separador detectado entre `;`, `,`, tab e `|`.
+  - Abrir a prévia (primeira página, sem aba escolhida) grava `document.previewed`; navegar entre páginas e abas não.
 
 ### 13.2 Importação estruturada (nível 3, F9)
 

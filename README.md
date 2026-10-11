@@ -15,8 +15,8 @@ O primeiro cliente é uma empresa de engenharia civil, mas nenhum comportamento 
 | 2 | Tenant, RBAC, Empresa, onboarding, Painel ZEVS mínimo, staging | ✅ Aprovada (11/10/2026) |
 | 3 | Armazenamento (R2) + Central de Documentos | ✅ Aprovada (11/10/2026) |
 | 4 | Prestadores + Financeiro | ✅ Aprovada (11/10/2026) |
-| 5 | PWA + mobile + produção paga → **piloto** | ✅ Concluída — aguardando aprovação (produção: roteiro com o Juan) |
-| 6 | Planilhas (níveis 1 e 2) | ⏳ |
+| 5 | PWA + mobile + produção paga → **piloto** | ✅ Aprovada (11/10/2026); go-live com o Juan (`docs/PRODUCTION.md`) |
+| 6 | Planilhas (níveis 1 e 2) | 🚧 Em andamento |
 | 7 | Notas fiscais | ⏳ |
 | 8 | Busca global + dashboard completo → **MVP completo** | ⏳ |
 | 9 | Importação estruturada de planilhas (nível 3) | ⏳ |

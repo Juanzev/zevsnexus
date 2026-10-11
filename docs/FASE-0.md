@@ -18,12 +18,13 @@ As decisões D1–D13 foram aprovadas conforme as recomendações. Nas perguntas
 | D11 · Tags em despesas | Adotadas (11/10/2026, início da F4): mesmas tags da empresa, filtro e total por tag |
 | D12f · Backup dos arquivos | GitHub Action diária com `rclone copy` para um bucket de backup (11/10/2026, início da F5) |
 | D13.2 · Domínio | Ainda não definido (11/10/2026): tudo parametrizado por `APP_URL`; produção pode começar em `*.onrender.com` |
+| D6.4 · Planilhas reais | Ainda não recebidas (11/10/2026): a F6 usa planilhas **fictícias** salvas pelo Excel e pelo LibreOffice (`fixtures/planilhas/`); as reais entram nos testes quando chegarem |
+| D6 · Biblioteca de leitura | Leitor próprio (zip com teto + `saxes`) para XLSX e ODS e CSV próprio (11/10/2026, início da F6) |
 
 Pendentes de informação do cliente, decididos na fase em que entram:
 
 | Pergunta | Fase |
 |---|---|
-| D6.4 · Planilhas reais | F6 |
 | D7.3 / D7.4 · Notas recebidas e tipos emitidos | F7 |
 | D13.2 · Domínio | Antes do piloto (decisão do Juan) |
 
