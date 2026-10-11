@@ -153,3 +153,35 @@ O arquivo nunca passa pela API: o navegador envia direto ao storage com URL assi
 | Bucket e CORS do R2 de staging (passo a passo em `DEPLOYMENT.md`); provar o envio direto ao R2 de verdade | Staging |
 | Backup diário dos objetos para um segundo bucket (D12f) | F5 |
 | Varredura antivírus: fora do escopo (não prevista na ARCHITECTURE). Mitigação atual: allowlist + magic bytes + arquivos servidos por outro domínio, com `inline` só para PDF e imagem. Decisão do Juan se um cliente exigir | — |
+
+## Fase 4 — Prestadores e Financeiro (11/10/2026)
+
+Dinheiro em centavos `bigint` do banco à tela (a tela lê o texto digitado sem passar por float). Pagamento é fato: não se edita nem se apaga — estorna, com motivo.
+
+### Checklist por funcionalidade
+
+| Funcionalidade | Quem executa | Tenant | Permissão | Dados visíveis | IDOR | Race condition | Transação | Audit log | Informação sensível |
+|---|---|---|---|---|---|---|---|---|---|
+| **Prestadores** `/parties` | Membro (ver) / quem gerencia (criar, editar, excluir, anexar) | `tenantRouter` + `withTenant` | `parties.view` / `parties.manage` | Cadastros da empresa; totais financeiros da ficha só com `finance.view` | Cadastro alheio → 404 (suíte A × B); prestador de outra empresa no corpo da despesa → 422 | Edição com `version` (409); CPF/CNPJ único por empresa (índice parcial → 409) | Sim | `party.created`/`updated`/`deleted`/`document_linked`/`document_unlinked` | **LGPD:** nome, CPF/CNPJ, e-mail, telefone, PIX e observações viram `[dado pessoal]` na auditoria; CPF/CNPJ validados por dígito verificador |
+| **Despesas** `/expenses` (listar, criar, editar, cancelar, anexar) | Membro (ver) / quem lança | `withTenant` | `finance.view` / `finance.manage` | Despesas e totais da empresa | Despesa alheia → 404 e nada muda; prestador, categoria, documento ou arquivo de outra empresa → 422 | **Sim**: mutação só depois de `SELECT … FOR UPDATE`; edição com `version` (2 edições simultâneas → 1 vence); valor nunca abaixo do pago | Sim | `expense.created`/`updated` (descrição, observações e tags como `[dado pessoal]`)/`cancelled`/`document_linked`/`document_unlinked` | Busca com curingas escapados; ordenação por allowlist; datas fora de 1990–2100 recusadas |
+| **Pagamento e estorno** `POST /expenses/:id/payments`, `POST /expense-payments/:id/void` | Quem paga (lançar ≠ pagar, D10) | `withTenant` | `finance.pay` | A despesa atualizada | Pagamento alheio → 404 | **Sim**: função única do saldo (`UPDATE … WHERE paid + Δ BETWEEN 0 AND amount`) — 5 pagamentos simultâneos de 40 numa despesa de 100: só 2 passam; mesmo estorno 3 vezes: 1 vale; cancelar × pagar ao mesmo tempo: nunca fica cancelada com pagamento ativo (testes de concorrência) | Sim: despesa travada, depois o pagamento (ordem fixa, sem deadlock) | `expense.payment_registered`/`payment_voided` com valor, data, forma e o pago depois | Trigger no banco: `DELETE` e qualquer `UPDATE` em `expense_payments` são recusados, salvo marcar o estorno uma vez; data do pagamento não pode ser futura (fuso da empresa); `Idempotency-Key` contra duplo clique |
+| **"Já paguei"** `POST /expenses` com `payment` | Quem lança **e** paga | `withTenant` | `finance.manage` + `finance.pay` (sem o segundo: 403 e nada é criado) | A despesa paga | Arquivo do comprovante de outra empresa ou de outra pessoa → 422 | Igual ao pagamento | Sim: despesa, pagamento, comprovante (documento) e auditoria juntos | `expense.created` + `expense.payment_registered` + `document.uploaded` | O comprovante passa pela mesma conferência da F3 (tipo, tamanho, magic bytes, cota) |
+| **Categorias** `/finance-categories` | Quem lança | `withTenant` | `finance.view` / `finance.manage` | Categorias da empresa | Categoria alheia → 404 (rota) / 422 (referência) | Nome único entre ativas | Sim | `finance_category.*` | — |
+| **Dashboard** `GET /dashboard` | Membro | `withTenant` + `SET LOCAL statement_timeout = '10s'` | `dashboard.view`; bloco financeiro só com `finance.view`, documentos só com `documents.view` | Indicadores da D4 e contagem de documentos vencendo | — (sem id) | Não | Leitura | — | **O backend omite** os valores para quem não pode ver (testado com deny de `finance.view`); período validado (personalizado até 2 anos) |
+
+### Controles da fase
+
+- **Saldo derivado:** `paid_amount_cents` fora da allowlist de escrita; só `expensesRepository.settle` o altera, com `UPDATE` atômico condicional. O status sai de uma expressão SQL única, e `CHECK`s no banco garantem que status e valores nunca discordam.
+- **Append-only:** `expense_payments` com trigger (sem `DELETE`, sem edição, estorno uma vez) e `TRUNCATE` bloqueado.
+- **Lançar ≠ pagar:** matriz D10 testada rota a rota para os 5 papéis (`tests/security/permissions-finance.test.js`).
+- **Isolamento:** suíte A × B para despesas, pagamentos, prestadores, categorias e referências no corpo (`tests/security/isolation-finance.test.js`).
+- **Frontend:** valores digitados viram centavos por manipulação de texto (`lib/money.js`, com testes); nenhum valor financeiro é calculado na tela — totais e "vencida" vêm da API.
+
+### Pendências da F4 (para as próximas fases)
+
+| Item | Fase |
+|---|---|
+| Exportação CSV do Financeiro (padrão Excel pt-BR, `data.export`, proteção contra fórmula) | F8 |
+| Comparação de período no dashboard e alertas | F8 |
+| Exportação e anonimização de prestador pessoa física (LGPD) | F10 |
+| Contas a receber (`receivables`) e recorrência: fora do MVP (D4) | — |

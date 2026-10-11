@@ -22,6 +22,8 @@ PostgreSQL 16+ (CI em 17, local em 18), `pg` sem ORM e migrations com node-pg-mi
 | `0007_platform` | `platform_admins`, `features`, `plans` (um único padrão), `plan_features`, `subscriptions` (uma por empresa), `company_features` (override) |
 | `0008_idempotency` | `idempotency_keys` (24 h; único por usuário + escopo + chave) |
 | `0009_documents` | `files`, `folders`, `document_types`, `documents`, `document_versions`, `tags`, `document_tags`, `document_favorites`, `company_settings` (com linha criada para as empresas existentes) |
+| `0010_parties` | `parties`, `party_documents`; `company_settings.parties_folder_id` |
+| `0011_finance` | `finance_categories` (com as sugeridas para empresas existentes), `expenses`, `expense_payments` (trigger append-only), `expense_documents`, `expense_tags`; `company_settings.upcoming_window_days` |
 
 **Seed do catálogo** (`npm run seed`, idempotente, roda em todo deploy): permissões, papéis com a matriz D10, features e planos, a partir de `src/modules/rbac/rbac.catalog.js` e `src/modules/plans/plans.catalog.js`. Nunca apaga permissão nem feature; sincroniza papel × permissão e plano × feature.
 
@@ -103,3 +105,17 @@ O cluster é próprio do projeto, na porta **5434**, só localhost e sem senha (
 | `zevs_nexus_e2e_test` | Playwright. O schema é recriado a cada execução |
 
 O cluster usa o provider de collation `builtin` (`C.UTF-8`, PostgreSQL 17+): `lower()` e `upper()` tratam acentos sem depender do locale do sistema.
+
+## Tabelas da F4 (destaques)
+
+- **`parties`** — `person_type` (`individual`/`company`); `document_normalized` com `CHECK` do formato por tipo (CPF 11 dígitos; CNPJ 14, alfanumérico) e único por empresa entre ativos; `roles text[]` não vazio e contido na lista; `search_text` gerada (nome + nome fantasia + especialidade) com trigram; `version`; soft delete.
+- **`party_documents`** — vínculo prestador × documento (FK composta, `ON DELETE CASCADE`).
+- **`finance_categories`** — `kind` (`expense`/`income`), `sort_order`, `archived_at`; nome único por empresa e tipo entre ativas.
+- **`expenses`**:
+  - `amount_cents bigint` (1 a 99.999.999.999.999); `paid_amount_cents` só pela função única (`settle`);
+  - `CHECK`s que amarram status e valores: `paid` ⇔ pago = valor; `partially_paid` ⇔ 0 < pago < valor; `pending`/`scheduled` ⇔ nada pago; `scheduled` exige `scheduled_for`; `cancelled` exige motivo, autor e nada pago;
+  - `party_id` e `category_id` com FK composta; `search_text` gerada (descrição + observações);
+  - índices `(company_id, status, due_date)`, `(company_id, due_date)`, `(company_id, party_id, due_date)`, `(company_id, category_id)`, GIN da busca.
+- **`expense_payments`** — `amount_cents > 0`, `method` na lista, `paid_on date`; estorno em `voided_at`/`voided_by`/`void_reason` (todos ou nenhum). Trigger `expense_payments_guard`: sem `DELETE`, sem edição, estorno uma vez; `TRUNCATE` bloqueado. `UNIQUE (company_id, expense_id, id)` para o vínculo do comprovante.
+- **`expense_documents`** — vínculo despesa × documento com `role` e, no comprovante, `payment_id` (FK composta que garante pagamento da mesma despesa).
+- **`expense_tags`** — tags da empresa em despesas (D11).

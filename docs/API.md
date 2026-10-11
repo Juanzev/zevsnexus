@@ -75,8 +75,8 @@ Rotas de dados de empresa exigem `Authorization: Bearer …` **e** `X-Company-Id
 | `GET /api/v1/company/context` | Membro ativo | — | `{ data: { company, membership: { id, roles }, permissions[], features[], branding: { primary_color }, document_folders: { company, receipts, invoices, spreadsheets } } }` (ids das pastas padrão ou `null`) |
 | `GET /api/v1/company` | `company.view` | — | `{ data: { company } }` (perfil completo, com `address` e `version`) |
 | `PATCH /api/v1/company` | `company.manage` | `{ version, legal_name?, trade_name?, cnpj?, state_registration?, municipal_registration?, tax_regime?, email?, phone?, address?: { cep, street, number, complement, district, city, state } }` | `{ data: { company } }`. `409 VERSION_CONFLICT` (`details.current_version`). Texto vazio limpa o campo |
-| `GET /api/v1/company/settings` | `settings.manage` | — | `{ data: { settings: { timezone, primary_color } } }` |
-| `PATCH /api/v1/company/settings` | `settings.manage` | `{ timezone?, primary_color? }` (`#RRGGBB`) | `{ data: { settings } }` |
+| `GET /api/v1/company/settings` | `settings.manage` | — | `{ data: { settings: { timezone, primary_color, upcoming_window_days } } }` |
+| `PATCH /api/v1/company/settings` | `settings.manage` | `{ timezone?, primary_color? (#RRGGBB), upcoming_window_days? (1–60) }` | `{ data: { settings } }` |
 | `GET /api/v1/company/contacts` | `company.view` | — | `{ data: { contacts: [...] } }` |
 | `POST /api/v1/company/contacts` | `company.manage` | `{ name, role_title?, email?, phone?, is_responsible?, notes? }` | `201 { data: { contact } }` |
 | `PATCH /api/v1/company/contacts/:id` | `company.manage` | Os mesmos campos, opcionais | `{ data: { contact } }`; outro tenant ou excluído → 404 |
@@ -140,11 +140,77 @@ Todas exigem `Authorization` + `X-Company-Id`. Leitura: `documents.view`. Escrit
 | `GET /document-types` | `?include_archived=true` | `{ data: { document_types: [{ id, name, archived_at, document_count }] } }` |
 | `POST /document-types` · `PATCH /document-types/:id` | `{ name }` | `201`/`200 { data: { document_type } }`. `409 DOCUMENT_TYPE_NAME_TAKEN` |
 | `POST /document-types/:id/archive` | `{}` | `{ data: { document_type } }` |
-| `GET /tags` | `?q=&limit=` (máx. 50) | `{ data: { tags: [{ id, name, document_count }] } }`. Tags são criadas ao marcar um documento |
+| `GET /tags` | `?q=&limit=` (máx. 50) | `{ data: { tags: [{ id, name, document_count, expense_count }] } }`. Tags são criadas ao marcar um documento ou uma despesa |
 
 ### `/dev-storage/*` (só desenvolvimento e testes)
 
 Com `STORAGE_PROVIDER=local` ou `memory`, as "URLs assinadas" apontam para a própria API: `PUT /dev-storage/upload/<token>` e `GET /dev-storage/download/<token>`. O token (HMAC) carrega a chave, a validade, o tipo e o tamanho. Tipo ou tamanho diferente → `403 SIGNATURE_MISMATCH`; token inválido ou vencido → `403 SIGNATURE_INVALID`. Essas rotas não existem com `r2`.
+
+## Prestadores e Financeiro (F4)
+
+Valores sempre em **centavos inteiros** (`amount_cents`); datas `AAAA-MM-DD` (calendário, no fuso da empresa). Permissões: prestadores `parties.view`/`parties.manage`; despesas `finance.view`/`finance.manage`; pagamento e estorno `finance.pay`.
+
+### Prestadores e fornecedores (`/parties`)
+
+| Método e rota | Corpo / query | Sucesso e erros |
+|---|---|---|
+| `GET /parties` | `?q=&role=supplier\|service_provider\|customer&person_type=&sort=name\|-name\|created_at\|-created_at&page=&limit=` | `{ data: { parties }, meta: { page, limit, total } }`. A busca casa nome, nome fantasia, especialidade, e-mail, CPF/CNPJ e telefone |
+| `POST /parties` | `{ person_type: "individual"\|"company", name, trade_name?, document?, roles[], specialty?, email?, phone?, pix_key?, notes? }` | `201 { data: { party } }`. `422` CPF/CNPJ inválido (CPF para pessoa física, CNPJ — inclusive alfanumérico — para jurídica); `409 PARTY_DOCUMENT_TAKEN` |
+| `GET /parties/:id` | — | `{ data: { party } }`; com `finance.view`, `party.finance = { expense_count, open_cents, overdue_cents, paid_cents }` |
+| `PATCH /parties/:id` | `{ version, ...campos }` | `{ data: { party } }`. `409 VERSION_CONFLICT`; trocar o tipo de pessoa exige documento compatível (422) |
+| `DELETE /parties/:id` | — | `204` (soft delete; despesas antigas mantêm o nome) |
+| `GET /parties/:id/expenses` (`finance.view`) | mesma query de `GET /expenses` | Despesas do prestador |
+| `GET /parties/:id/documents` (`documents.view`) | — | `{ data: { documents: [{ id, title, extension, size_bytes, expires_on, linked_at }] } }` |
+| `POST /parties/:id/documents` (`Idempotency-Key`) | `{ file_id }` (arquivo novo, vira documento na pasta padrão de prestadores) **ou** `{ document_id }` (já na Central) | `201 { data: { documents } }` |
+| `DELETE /parties/:id/documents/:documentId` | — | `204` (o documento continua na Central) |
+
+**Prestador:** `{ id, person_type, name, trade_name, document, roles[], specialty, email, phone, pix_key, notes, version, created_at, updated_at }` (documento e telefone sem máscara).
+
+### Despesas (`/expenses`) e pagamentos
+
+| Método e rota | Corpo / query | Sucesso e erros |
+|---|---|---|
+| `GET /expenses` | `?tab=open\|overdue\|upcoming\|paid\|cancelled\|all&q=&party_id=&category_id=&tag_id=&due_from=&due_to=&sort=&page=&limit=` (`sort`: `due_date`, `amount`, `description`, `created_at`, com `-` para decrescente) | `{ data: { expenses }, meta: { page, limit, total, totals: { amount_cents, paid_cents, open_cents }, today, upcoming_window_days } }`. Os totais são de todo o filtro |
+| `POST /expenses` (`finance.manage`, `Idempotency-Key`) | `{ description, amount_cents, due_date, party_id?, category_id?, scheduled_for?, notes?, tags? }` | `201 { data: { expense } }` (detalhe). `422 PARTY_NOT_FOUND`, `CATEGORY_NOT_FOUND` |
+| `POST /expenses` com `payment` — **"Já paguei"** (exige também `finance.pay`) | `… , payment: { paid_on, method, amount_cents?, reference?, notes?, receipt_file_id? }` (sem `due_date`, vale `paid_on`; sem `amount_cents`, o valor da despesa) | `201` com a despesa paga e o comprovante vinculado. `403 PERMISSION_DENIED` (`details.permissions: ["finance.pay"]`) sem pagar nada |
+| `GET /expenses/:id` | — | `{ data: { expense } }` com `payments[]` e `documents[]` |
+| `PATCH /expenses/:id` (`finance.manage`) | `{ version, description?, amount_cents?, due_date?, party_id?, category_id?, scheduled_for?, notes?, tags? }` | `{ data: { expense } }`. `409 VERSION_CONFLICT`, `409 EXPENSE_CANCELLED`, `422 AMOUNT_BELOW_PAID` |
+| `POST /expenses/:id/cancel` (`finance.manage`) | `{ reason }` | `{ data: { expense } }`. `409 EXPENSE_HAS_PAYMENTS` (estorne antes), `409 EXPENSE_CANCELLED` |
+| `POST /expenses/:id/payments` (`finance.pay`, `Idempotency-Key`) | `{ paid_on, amount_cents, method: pix\|transfer\|boleto\|cash\|card\|check\|other, reference?, notes?, receipt_file_id? }` | `201 { data: { expense } }`. `422 PAYMENT_EXCEEDS_BALANCE` (`details[0].remaining_cents`), `422 PAYMENT_DATE_IN_FUTURE`, `409 EXPENSE_CANCELLED` |
+| `POST /expense-payments/:id/void` (`finance.pay`) | `{ reason }` | `{ data: { expense } }`. `409 PAYMENT_ALREADY_VOIDED` |
+| `POST /expenses/:id/documents` (`finance.manage`, `Idempotency-Key`) | `{ file_id \| document_id, role: boleto\|invoice\|contract\|receipt\|other }` | `201 { data: { expense } }` |
+| `DELETE /expenses/:id/documents/:documentId` | — | `{ data: { expense } }` (o documento continua na Central) |
+| `GET /expenses/:id/history` (`finance.view`) | — | `{ data: { events: [{ action, created_at, actor: { name }, details, changed_fields }] } }` |
+
+**Despesa:** `{ id, description, party: { id, name } | null, category: { id, name } | null, amount_cents, paid_amount_cents, open_amount_cents, due_date, scheduled_for, status: pending|scheduled|partially_paid|paid|cancelled, overdue, tags[], has_receipt, notes, cancelled_at, cancel_reason, version, created_at, updated_at }`. `overdue` é calculado no fuso da empresa (nunca gravado).
+
+### Categorias (`/finance-categories`)
+
+| Método e rota | Corpo / query | Sucesso |
+|---|---|---|
+| `GET /finance-categories` (`finance.view`) | `?kind=expense\|income&include_archived=true` | `{ data: { categories: [{ id, kind, name, sort_order, archived_at, expense_count }] } }` |
+| `POST /finance-categories` (`finance.manage`) | `{ name, kind? (expense), sort_order? }` | `201 { data: { category } }`. `409 CATEGORY_NAME_TAKEN` |
+| `PATCH /finance-categories/:id` | `{ name?, sort_order? }` | `{ data: { category } }` |
+| `POST /finance-categories/:id/archive` | `{}` | `{ data: { category } }` (não recebe despesas novas) |
+
+### Dashboard (`GET /dashboard`)
+
+`dashboard.view`. Query `?period=today|yesterday|7d|30d|this_month|last_month|this_year|custom&from=&to=` (padrão `this_month`; personalizado com início ≤ fim e até 2 anos).
+
+```json
+{ "data": {
+  "period": { "key": "this_month", "from": "2026-10-01", "to": "2026-10-31" }, "today": "2026-10-11",
+  "finance": {
+    "overdue": { "count": 1, "open_cents": 600 },
+    "due_soon": { "count": 1, "open_cents": 2000, "days": 7 },
+    "paid_in_period": { "count": 1, "amount_cents": 400 },
+    "expenses_in_period": { "count": 3, "amount_cents": 7000 }
+  },
+  "documents": { "expired_count": 0, "expiring_count": 0, "expiring_days": 30 }
+} }
+```
+
+`finance` só para quem tem `finance.view`; `documents` só com `documents.view`. Definições (FASE-0, D4): **a pagar vencido** = saldo em aberto das despesas não quitadas com vencimento antes de hoje; **vence em 7 dias** = o mesmo, de hoje a hoje + 7; **pago no período** = soma dos pagamentos não estornados com data no período (caixa); **despesas do período** = soma das despesas não canceladas com vencimento no período.
 
 ## Painel ZEVS (`/api/v1/admin`)
 

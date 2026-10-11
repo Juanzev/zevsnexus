@@ -12,7 +12,7 @@
 
 ## Estado atual
 
-- **F0 aprovada (09/10/2026) · F1 aprovada (10/10/2026) · F2 aprovada (11/10/2026) · F3 aprovada (11/10/2026) · F4 em andamento.**
+- **F0 aprovada (09/10/2026) · F1 aprovada (10/10/2026) · F2 aprovada (11/10/2026) · F3 aprovada (11/10/2026) · F4 concluída, aguardando aprovação.**
 - **Plano:** F1 Fundação + Auth → F2 Tenant/RBAC/Empresa/Plataforma → F3 Armazenamento + Documentos → F4 Prestadores + Financeiro → F5 PWA + piloto → F6 Planilhas → F7 Notas → F8 Busca + dashboard → F9 Importação → F10 Equipe/LGPD/hardening → F11 Painel ZEVS completo.
 
 ## Fonte das regras
@@ -192,4 +192,7 @@ Responder por escrito em `docs/SECURITY.md` antes do merge:
 - **Arquivos:** o navegador só escreve na chave de envio (`…/uploads/<id>`); a confirmação copia para `…/files/<id>` condicionada à ETag conferida. Arquivo novo de um módulo entra por `filesService.verifyUpload` + `claimFile` na transação de quem usa o arquivo, nunca por um "confirmar" solto.
 - `STORAGE_PROVIDER`: `local` em dev (`.storage/`), `memory` nos testes e no E2E, `r2` obrigatório em produção. Nos testes, `tests/helpers/documents.js` faz intenção → PUT no `/dev-storage` → `POST /documents`.
 - No `<dialog>`, `showModal()` foca o primeiro botão (o "X"): o `openFormModal` foca o primeiro campo depois de abrir.
+- - **Financeiro:** `paid_amount_cents` só muda em `expensesRepository.settle`; o status só sai da expressão única do repository. Pagamento novo de outro módulo (ex.: importação na F9) passa por `expenses.service`, nunca por `INSERT` direto.
+- **Espaço inseparável** (formatação de moeda, recuo de `<option>`): escreva `String.fromCharCode(0xa0)` ou `\s` na regex. O caractere literal é invisível e o ESLint recusa (`no-irregular-whitespace`).
+- **Scripts de edição:** Python com `"\1"` dentro de texto vira o caractere de controle `\x01`; use string crua (`r'''...'''`) ou edite pelo editor.
 - - Vulnerabilidade transitiva sem correção em ferramenta de desenvolvimento: registrar em `docs/SECURITY.md` (riscos aceitos). Se houver versão corrigida do pacote intermediário, usar `overrides` (ex.: `@parcel/watcher` do Tailwind).
