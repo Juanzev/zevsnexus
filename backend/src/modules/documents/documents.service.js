@@ -2,7 +2,7 @@
 // documento com versões; os outros módulos vinculam documentos.
 // Mutação por id só depois do documento travado (FOR UPDATE); auditoria na mesma transação.
 import { withTenant } from '../../shared/db.js';
-import { ConflictError, NotFoundError } from '../../shared/errors.js';
+import { ConflictError, NotFoundError, ValidationError } from '../../shared/errors.js';
 import { isInlineAllowed, titleFromFilename } from '../../shared/files.js';
 import { addDays, todayIn } from '../../shared/timezones.js';
 import { auditChanges, PERSONAL_DATA, recordAudit } from '../audit/audit.service.js';
@@ -145,44 +145,70 @@ export function getHistory(ctx, id) {
 // ---------- envio e versões ----------
 
 /**
- * POST /documents: confere o arquivo no storage (fora da transação) e, numa transação, valida as
- * referências, consome a cota, marca o arquivo `ready`, cria o documento, a versão 1, as tags e a auditoria.
+ * Documento a partir de um arquivo já conferido (verifyUpload), DENTRO da transação de quem usa o
+ * arquivo: Central de Documentos, comprovante de pagamento, anexo de despesa ou de prestador.
+ * Valida as referências, consome a cota, marca o arquivo `ready`, cria o documento, a versão 1, as
+ * tags e a auditoria. Devolve { id, file }.
  */
+export async function createFromUpload(client, ctx, fileId, input = {}) {
+  const folderId = input.folder_id ?? null;
+  const documentTypeId = input.document_type_id ?? null;
+  await assertTargetFolder(client, ctx.companyId, folderId);
+  await assertActiveType(client, ctx.companyId, documentTypeId);
+  const claimed = await filesService.claimFile(client, ctx, fileId);
+
+  const repo = documentsRepository(client);
+  const { id } = await repo.insert(ctx.companyId, {
+    folderId,
+    title: (input.title || titleFromFilename(claimed.original_name)).slice(0, 200),
+    description: input.description ?? null,
+    documentTypeId,
+    expiresOn: input.expires_on ?? null,
+    userId: ctx.userId,
+  });
+  await repo.insertVersion(ctx.companyId, id, { fileId: claimed.id, comment: null, userId: ctx.userId });
+  if (input.tags?.length) await setDocumentTags(client, ctx.companyId, id, input.tags);
+  await recordAudit(client, ctx, {
+    action: 'document.uploaded',
+    entityType: 'document',
+    entityId: id,
+    metadata: {
+      version_number: 1,
+      file_id: claimed.id,
+      extension: claimed.extension,
+      size_bytes: claimed.size_bytes,
+      folder_id: folderId,
+      document_type_id: documentTypeId,
+    },
+  });
+  return { id, file: claimed };
+}
+
+/** POST /documents: conferência no storage fora da transação; o resto em createFromUpload. */
 export async function createDocument(ctx, input) {
   const file = await filesService.verifyUpload(ctx, input.file_id);
   return withTenant(ctx.companyId, async (client) => {
-    const folderId = input.folder_id ?? null;
-    const documentTypeId = input.document_type_id ?? null;
-    await assertTargetFolder(client, ctx.companyId, folderId);
-    await assertActiveType(client, ctx.companyId, documentTypeId);
-    const claimed = await filesService.claimFile(client, ctx, file.id);
-
-    const repo = documentsRepository(client);
-    const { id } = await repo.insert(ctx.companyId, {
-      folderId,
-      title: input.title || titleFromFilename(claimed.original_name),
-      description: input.description ?? null,
-      documentTypeId,
-      expiresOn: input.expires_on ?? null,
-      userId: ctx.userId,
-    });
-    await repo.insertVersion(ctx.companyId, id, { fileId: claimed.id, comment: null, userId: ctx.userId });
-    if (input.tags?.length) await setDocumentTags(client, ctx.companyId, id, input.tags);
-    await recordAudit(client, ctx, {
-      action: 'document.uploaded',
-      entityType: 'document',
-      entityId: id,
-      metadata: {
-        version_number: 1,
-        file_id: claimed.id,
-        extension: claimed.extension,
-        size_bytes: claimed.size_bytes,
-        folder_id: folderId,
-        document_type_id: documentTypeId,
-      },
-    });
-    return toDocument(await repo.find(ctx.companyId, ctx.membershipId, id), today(ctx));
+    const { id } = await createFromUpload(client, ctx, file.id, input);
+    return toDocument(await documentsRepository(client).find(ctx.companyId, ctx.membershipId, id), today(ctx));
   });
+}
+
+/** Documento existente (fora da lixeira) para vincular a uma despesa ou prestador; senão 422. */
+export async function assertLinkableDocument(client, ctx, documentId, field = 'document_id') {
+  const row = await documentsRepository(client).find(ctx.companyId, ctx.membershipId, documentId);
+  if (!row || row.deleted_at) {
+    throw new ValidationError(
+      [{ field, code: 'DOCUMENT_NOT_FOUND', message: 'Documento não encontrado.' }],
+      'DOCUMENT_NOT_FOUND',
+      'Documento não encontrado.',
+    );
+  }
+  return row;
+}
+
+/** Pasta padrão de um uso ('receipts', 'parties'…), ou null = raiz. */
+export function defaultFolder(client, companyId, use) {
+  return foldersRepository(client).findDefaultFolder(companyId, use);
 }
 
 /** Trava o documento ativo (fora da lixeira) para alterar. */
@@ -371,6 +397,12 @@ export function setFavorite(ctx, id, favorite) {
     if (favorite) await repo.addFavorite(ctx.companyId, ctx.membershipId, id);
     else await repo.removeFavorite(ctx.companyId, ctx.membershipId, id);
   });
+}
+
+/** Bloco de documentos do dashboard (D5.3). Chamar dentro da transação do dashboard. */
+export async function documentIndicators(client, ctx, todayDate) {
+  const row = await documentsRepository(client).expiryCounts(ctx.companyId, todayDate, EXPIRING_DAYS);
+  return { expired_count: row.expired_count, expiring_count: row.expiring_count, expiring_days: EXPIRING_DAYS };
 }
 
 // ---------- empresa nova ----------

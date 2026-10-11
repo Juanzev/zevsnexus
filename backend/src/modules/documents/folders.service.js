@@ -172,11 +172,14 @@ export async function createDefaultFolders(client, companyId, userId) {
   const receipts = await make('Comprovantes', finance.id);
   const invoices = await make('Notas fiscais');
   const spreadsheets = await make('Planilhas');
-  for (const name of ['Contratos', 'Prestadores', 'Outros']) await make(name);
+  await make('Contratos');
+  const parties = await make('Prestadores');
+  await make('Outros');
   return {
     company_folder_id: company.id,
     receipts_folder_id: receipts.id,
     invoices_folder_id: invoices.id,
     spreadsheets_folder_id: spreadsheets.id,
+    parties_folder_id: parties.id,
   };
 }

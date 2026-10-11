@@ -27,6 +27,22 @@ export function isValidCnpj(value) {
   return cnpj.endsWith(`${first}${second}`);
 }
 
+/** CPF sem máscara (só dígitos). */
+export function normalizeCpf(value) {
+  return String(value ?? '').replace(/[.\-\s]/g, '');
+}
+
+export function isValidCpf(value) {
+  const cpf = normalizeCpf(value);
+  if (!/^[0-9]{11}$/.test(cpf) || /^(\d)\1{10}$/.test(cpf)) return false;
+  const digit = (length) => {
+    const sum = [...cpf.slice(0, length)].reduce((total, char, index) => total + Number(char) * (length + 1 - index), 0);
+    const rest = (sum * 10) % 11;
+    return rest === 10 ? 0 : rest;
+  };
+  return digit(9) === Number(cpf[9]) && digit(10) === Number(cpf[10]);
+}
+
 /** Telefone brasileiro com DDD: só dígitos, 10 (fixo) ou 11 (celular). */
 export function normalizePhone(value) {
   const digits = String(value ?? '').replace(/\D/g, '');

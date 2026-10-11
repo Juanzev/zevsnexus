@@ -6,6 +6,14 @@ const FOLDER_COLUMNS = 'id, parent_id, name, created_at, updated_at';
 const RECURSION_GUARD = 64;
 // Espaço das travas consultivas por empresa (pg_advisory_xact_lock de dois inteiros).
 const FOLDER_LOCK_SPACE = 4201;
+/** Uso → coluna de company_settings (identificadores fixos do código). */
+const DEFAULT_FOLDER_COLUMNS = Object.freeze({
+  company: 'company_folder_id',
+  receipts: 'receipts_folder_id',
+  invoices: 'invoices_folder_id',
+  spreadsheets: 'spreadsheets_folder_id',
+  parties: 'parties_folder_id',
+});
 
 export function foldersRepository(db) {
   return {
@@ -118,16 +126,26 @@ export function foldersRepository(db) {
     /** Linha de configurações da empresa nova, já com as pastas padrão. */
     async insertSettings(companyId, folders) {
       await db.query(
-        `INSERT INTO company_settings (company_id, company_folder_id, receipts_folder_id, invoices_folder_id, spreadsheets_folder_id)
-         VALUES ($1, $2, $3, $4, $5)`,
+        `INSERT INTO company_settings
+           (company_id, company_folder_id, receipts_folder_id, invoices_folder_id, spreadsheets_folder_id, parties_folder_id)
+         VALUES ($1, $2, $3, $4, $5, $6)`,
         [
           companyId,
           folders.company_folder_id,
           folders.receipts_folder_id,
           folders.invoices_folder_id,
           folders.spreadsheets_folder_id,
+          folders.parties_folder_id,
         ],
       );
+    },
+
+    /** Pasta padrão de um uso (allowlist de colunas), ou null = raiz. */
+    async findDefaultFolder(companyId, use) {
+      const column = DEFAULT_FOLDER_COLUMNS[use];
+      if (!column) throw new Error(`pasta padrão desconhecida: ${use}`);
+      const { rows } = await db.query(`SELECT ${column} AS folder_id FROM company_settings WHERE company_id = $1`, [companyId]);
+      return rows[0]?.folder_id ?? null;
     },
 
     /** Pasta padrão excluída: a configuração correspondente volta para a raiz (null). */
@@ -137,8 +155,10 @@ export function foldersRepository(db) {
            company_folder_id = NULLIF(company_folder_id, $2),
            receipts_folder_id = NULLIF(receipts_folder_id, $2),
            invoices_folder_id = NULLIF(invoices_folder_id, $2),
-           spreadsheets_folder_id = NULLIF(spreadsheets_folder_id, $2)
-         WHERE company_id = $1 AND $2 IN (company_folder_id, receipts_folder_id, invoices_folder_id, spreadsheets_folder_id)`,
+           spreadsheets_folder_id = NULLIF(spreadsheets_folder_id, $2),
+           parties_folder_id = NULLIF(parties_folder_id, $2)
+         WHERE company_id = $1
+           AND $2 IN (company_folder_id, receipts_folder_id, invoices_folder_id, spreadsheets_folder_id, parties_folder_id)`,
         [companyId, id],
       );
     },
