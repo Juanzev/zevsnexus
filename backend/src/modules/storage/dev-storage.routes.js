@@ -58,8 +58,13 @@ export function createDevStorageRouter() {
       'Content-Type': grant.ct,
       'Content-Disposition': contentDisposition(grant.disp, grant.name),
       'Cache-Control': 'private, no-store',
-      // Servido pela origem da API só em dev: conteúdo enviado nunca roda script aqui.
-      'Content-Security-Policy': "default-src 'none'; img-src 'self'; style-src 'unsafe-inline'; sandbox",
+      // Servido pela origem da API só em dev/teste (em produção vem do domínio do R2): conteúdo enviado
+      // nunca roda script aqui. Inline (só PDF e imagem) fica sem sandbox/object-src, que bloqueariam o
+      // visualizador de PDF do navegador.
+      'Content-Security-Policy':
+        grant.disp === 'inline'
+          ? "script-src 'none'; frame-ancestors 'none'; base-uri 'none'; form-action 'none'"
+          : "default-src 'none'; sandbox",
     });
     res.send(body);
   });

@@ -204,7 +204,7 @@ describe('versões e download', () => {
     expect(file.headers['content-type']).toBe('application/pdf');
     expect(file.headers['content-disposition']).toMatch(/^inline; filename="Projeto revisado.pdf"/);
     expect(file.headers['x-content-type-options']).toBe('nosniff');
-    expect(file.headers['content-security-policy']).toMatch(/sandbox/);
+    expect(file.headers['content-security-policy']).toMatch(/script-src 'none'/);
     expect(file.body).toEqual(await memoryStorage().read(fileKey(tenant.company.id, fileId)));
 
     const [event] = await auditEvents({ companyId: tenant.company.id, action: 'document.downloaded', entityId: doc.id });
@@ -218,6 +218,7 @@ describe('versões e download', () => {
     expect(res.body.data.disposition).toBe('attachment');
     const file = await api(app).get(devStoragePath(res.body.data.url));
     expect(file.headers['content-disposition']).toMatch(/^attachment;/);
+    expect(file.headers['content-security-policy']).toBe("default-src 'none'; sandbox");
     expect(file.headers['content-type']).toMatch(/^application\/xml/);
   });
 
