@@ -1,0 +1,62 @@
+# Blueprint do Render (ZEVS STRUCTURE pág. 18) — STAGING.
+# Serviço único: o backend serve API + SPA. Região Virginia (mais perto do Brasil).
+#
+# Plano free: sem preDeployCommand, então migrations + seed rodam no fim do build.
+# Produção (F5) vai para plano pago, com `preDeployCommand: cd backend && npm run migrate && npm run seed`.
+# O banco de staging é externo (Neon ou Supabase): o Postgres free do Render expira em 30 dias.
+#
+# Segredos: `sync: false` = preencher no painel do Render; nunca neste arquivo.
+services:
+  - type: web
+    name: zevs-nexus-staging
+    runtime: node
+    region: virginia
+    plan: free
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /ready
+    # O frontend instala devDependencies (Tailwind): com NODE_ENV=production o npm pularia o build do CSS.
+    buildCommand: >-
+      cd frontend && npm ci --include=dev && npm run build &&
+      cd ../backend && npm ci --omit=dev && npm run migrate && npm run seed
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "24"
+      - key: LOG_LEVEL
+        value: info
+      # URL pública do staging (https), sem barra no fim. Base dos links de e-mail e da allowlist de CORS/CSRF.
+      - key: APP_URL
+        sync: false
+      # Connection string do Neon/Supabase (com sslmode=require).
+      - key: DATABASE_URL
+        sync: false
+      - key: DATABASE_SSL
+        value: "true"
+      - key: DATABASE_POOL_MAX
+        value: "5"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: BCRYPT_ROUNDS
+        value: "12"
+      - key: SERVE_FRONTEND
+        value: "true"
+      - key: TRUST_PROXY
+        value: "1"
+      # Segredo da Transform Rule do Cloudflare (X-Origin-Auth). Vazio até haver domínio no Cloudflare.
+      - key: CF_ORIGIN_SECRET
+        sync: false
+      # Staging em modo log: nenhum e-mail sai. Para enviar de verdade: EMAIL_PROVIDER=resend + RESEND_API_KEY.
+      - key: EMAIL_PROVIDER
+        value: log
+      - key: EMAIL_FROM
+        value: ZEVS Nexus <no-reply@zevs.tec.br>
+      # E-mails da equipe ZEVS com acesso ao Painel (valem só depois de verificados).
+      - key: PLATFORM_ADMIN_EMAILS
+        sync: false
+      - key: TRIAL_DAYS
+        value: "30"
+      - key: JOBS_ENABLED
+        value: "true"

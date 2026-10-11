@@ -59,13 +59,13 @@ Na F1 não há tenant: o usuário é global, e empresa, membership e RBAC chegam
 
 | Item | Fase |
 |---|---|
-| Gravar os eventos de auth (`auth.login`, `auth.login_failed`, `auth.logout`, `auth.refresh_reuse`, `auth.password_*`) em `audit_logs` (`company_id` nulo). Hoje só o reuso de refresh vai para o log de segurança | F2 (tabela `audit_logs`) |
+| ~~Gravar os eventos de auth em `audit_logs`~~ | ✅ Feito na F2 |
 | Contas nunca verificadas e sem empresa: limpeza por job depois de N dias | F10 |
 | Lista de sessões ativas (IP e user-agent já são gravados no refresh) | F10 |
 | Textos de termos de uso e política de privacidade (o aceite já é registrado em `users.terms_accepted_at`) | Antes do piloto (F5) |
 | Rate limit em memória: vale por instância. Com mais de uma instância, store compartilhado | Quando houver 2+ instâncias |
 | Janela de < 1 s: access token emitido no mesmo segundo de um "sair de todos" ainda vale até expirar (15 min) | Aceito |
-| O aviso de "tentativa de cadastro" (que evita a enumeração) e o pedido de recuperação de senha podem ser usados para mandar e-mails repetidos a um endereço existente. Hoje só o rate limit por IP contém isso; avaliar um limite por destinatário (ex.: 3 avisos/hora por e-mail) | F2 |
+| ~~Limite de e-mails por destinatário (aviso de cadastro e recuperação de senha)~~ | ✅ Feito na F2: 3 por hora |
 
 ### Riscos aceitos em dependências
 
@@ -74,3 +74,46 @@ Na F1 não há tenant: o usuário é global, e empresa, membership e RBAC chegam
 | `sprintf-js` (via `@istanbuljs/load-nyc-config` → Jest) | Moderada (DoS por especificador de precisão) | Só desenvolvimento/teste do backend | Não existe versão corrigida; não roda em produção nem recebe entrada externa. O CI audita só as dependências de produção (`--omit=dev`), hoje com **0 vulnerabilidades** |
 
 Corrigido na F1: `braces` (alta, via `@parcel/watcher` 2.5.1 do Tailwind CLI) → `overrides` para `@parcel/watcher@^2.6.0`, que não depende mais de `micromatch`/`braces`. O frontend está com **0 vulnerabilidades**.
+
+---
+
+## Fase 2 — Tenant, RBAC, Empresa e Painel ZEVS (11/10/2026)
+
+A partir daqui toda rota de dados de empresa passa por `tenantRouter()`: `authenticate` → `tenantContext` (membership **ativa** em empresa **ativa**) → `requirePermission`. A guarda estática (`tests/static/tenant-router.test.js`) falha se um `*.routes.js` novo não usar o `tenantRouter`.
+
+### Checklist por funcionalidade
+
+| Funcionalidade | Quem executa | Tenant | Permissão | Dados visíveis | IDOR | Race condition | Transação | Audit log | Informação sensível |
+|---|---|---|---|---|---|---|---|---|---|
+| **Cadastrar empresa** `POST /companies` | Usuário com e-mail **verificado** | Cria o tenant | — | A empresa criada | Não há id de entrada; `company_id`/`status` no corpo → 422 | **Sim**: lock por usuário (`pg_advisory_xact_lock`) + uma empresa pendente por vez; `Idempotency-Key` contra duplo clique (testes de concorrência) | Sim: empresa, marca, uso, vínculo owner, assinatura e auditoria | `company.created` | CNPJ validado (inclusive alfanumérico); empresa nasce `pending` |
+| **Contexto** `GET /company/context` | Membro ativo | Header `X-Company-Id` validado | — | Empresa, papéis, permissões, features, cor | Outra empresa → 404 idêntico a inexistente | Não | `withTenant` | — | Nenhuma |
+| **Perfil** `GET`/`PATCH /company` | Membro (`company.view`) / gestor (`company.manage`) | `withTenant` | `company.view` / `company.manage` | Dados cadastrais | `status`, `company_id` e campos fora da allowlist → 422 | **Sim**: `SELECT … FOR UPDATE` + `version` (5 edições simultâneas → 1 vence, 4 × 409) | Sim | `company.updated`, com e-mail e telefone como `[dado pessoal]` | E-mail/telefone da empresa podem ser de pessoa física (MEI): valor nunca vai para a auditoria |
+| **Configurações** `GET`/`PATCH /company/settings` | Gestor | `withTenant` | `settings.manage` | Fuso e cor | — | Empresa travada com `FOR UPDATE` | Sim | `settings.updated` | Cor só `#RRGGBB` (Zod + `CHECK` no banco): nada de CSS arbitrário virando variável |
+| **Contatos** `/company/contacts` | Membro (ver) / gestor (criar, editar, excluir) | `scopedTable` impõe `company_id` | `company.view` / `company.manage` | Contatos da própria empresa | Contato de outra empresa → 404; o registro alheio não muda (suíte A × B) | Linha travada antes de editar/excluir | Sim | `company_contact.*`, nome, e-mail, telefone e observações como `[dado pessoal]` | Dados pessoais (LGPD): só para membros da empresa |
+| **Painel ZEVS** `/admin/companies*` | Platform Admin (registro em `platform_admins` ou e-mail de bootstrap **verificado**) | Cross-tenant por desenho (`withSystem`) | `requirePlatformAdmin` (dono de empresa → 403) | Empresas, status, dono (nome e e-mail) | Ações por id com a empresa travada (`FOR UPDATE`) e status de origem conferido | Sim (transição de status checada dentro da transação) | Sim | `platform.company_*`, gravado **na empresa afetada** com `actor_type = platform_admin` | Busca escapa `%` e `_`; e-mail de aprovação só depois do commit |
+| **Eventos de conta** (login, falha, saída, reuso, reset, troca, verificação) | — | `company_id` nulo | — | — | — | — | Na mesma transação do evento | `auth.*` | Metadata sem e-mail nem senha; IP e user-agent registrados |
+
+### Controles da fase
+
+- **Isolamento em camadas:**
+  1. `tenantContext` resolve vínculo, papéis, permissões (papéis ∪ grants − denies) e features numa query só, a cada requisição;
+  2. `tenantRouter` com guarda estática;
+  3. repository escopado (`scopedTable`);
+  4. FK composta (`membership_roles` e `membership_permissions` recusam vínculo de outra empresa — testado com SQL direto);
+  5. `withTenant` em toda consulta de tenant (RLS fica pronto para a F10);
+  6. suíte A × B.
+- **Respostas de tenant:** sem header → 400 `COMPANY_REQUIRED`; inválido, inexistente, alheio ou removido → 404 `COMPANY_NOT_FOUND`; pendente → 403 `COMPANY_PENDING`; suspensa → 403 `COMPANY_SUSPENDED`; vínculo suspenso → 403 `MEMBERSHIP_SUSPENDED`.
+- **Permissões:** matriz D10 testada rota a rota para os 5 papéis (`tests/security/permissions-company.test.js`). Mudança de acesso vale na próxima requisição.
+- **Anti-escalada:** política pura testada (`CANNOT_CHANGE_SELF`, `OWNER_PROTECTED`, `TARGET_OUTRANKS`, `PRIVILEGE_ESCALATION`, `LAST_OWNER`). As rotas de equipe usam essa política na F10.
+- **Auditoria append-only:** `UPDATE`, `DELETE` e `TRUNCATE` bloqueados por trigger (testado).
+- **Idempotência:** mesma chave + mesmo corpo → resposta salva (`Idempotent-Replayed: true`); corpo diferente → 422; em andamento → 409; erro não consome a chave.
+- **Teto de e-mails:** aviso de cadastro e recuperação de senha limitados a 3 por hora por destinatário (contados pela auditoria). A resposta continua igual.
+- **Frontend:** a cor da marca só entra como CSS variable se for `#RRGGBB`; aviso de contraste baixo (texto branco nos botões abaixo de 4,5:1). A empresa selecionada fica em `localStorage` só como preferência; o backend valida o vínculo a cada requisição.
+
+### Pendências da F2 (para as próximas fases)
+
+| Item | Fase |
+|---|---|
+| Rotas de equipe (convites, papéis, grant/deny) usando a política de anti-escalada já testada | F10 |
+| Ligar as policies de RLS (todas as consultas de tenant já passam por `withTenant`) | F10 (D2) |
+| Staging com e-mail em modo log não envia o link de confirmação: para testar o cadastro completo lá, configurar o Resend | Staging |

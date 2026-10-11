@@ -11,8 +11,8 @@ O primeiro cliente é uma empresa de engenharia civil, mas nenhum comportamento 
 | Fase | Entrega | Status |
 |---|---|---|
 | 0 | Proposta, decisões D1–D13, arquitetura | ✅ Aprovada (09/10/2026) |
-| 1 | Fundação + autenticação + base da SPA (telas de acesso) | ✅ Concluída — aguardando aprovação |
-| 2 | Tenant, RBAC, Empresa, onboarding, Painel ZEVS mínimo, staging | ⏳ |
+| 1 | Fundação + autenticação + base da SPA (telas de acesso) | ✅ Aprovada (10/10/2026) |
+| 2 | Tenant, RBAC, Empresa, onboarding, Painel ZEVS mínimo, staging | ✅ Concluída — aguardando aprovação |
 | 3 | Armazenamento (R2) + Central de Documentos | ⏳ |
 | 4 | Prestadores + Financeiro | ⏳ |
 | 5 | PWA + mobile + produção paga → **piloto** | ⏳ |

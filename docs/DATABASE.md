@@ -15,6 +15,14 @@ PostgreSQL 16+ (CI em 17, local em 18), `pg` sem ORM e migrations com node-pg-mi
 |---|---|
 | `0001_extensions` | `pgcrypto`, `citext`, `pg_trgm`, `unaccent`; função `f_unaccent(text)` IMMUTABLE; triggers genéricos `set_updated_at()` e `prevent_mutation()` |
 | `0002_users_auth` | `users`, `refresh_tokens`, `password_reset_tokens`, `email_verification_tokens` |
+| `0003_companies` | `companies` (tenant; `version`, status `pending`/`active`/`suspended`), `company_branding`, `company_contacts`, `company_usage` |
+| `0004_memberships` | `memberships` (vínculo usuário × empresa; único ativo por par) |
+| `0005_rbac` | `permissions`, `roles`, `role_permissions`, `membership_roles` e `membership_permissions` (grant/deny), com FK composta `(company_id, membership_id)` |
+| `0006_audit` | `audit_logs` (append-only: trigger bloqueia `UPDATE`, `DELETE` e `TRUNCATE`) |
+| `0007_platform` | `platform_admins`, `features`, `plans` (um único padrão), `plan_features`, `subscriptions` (uma por empresa), `company_features` (override) |
+| `0008_idempotency` | `idempotency_keys` (24 h; único por usuário + escopo + chave) |
+
+**Seed do catálogo** (`npm run seed`, idempotente, roda em todo deploy): permissões, papéis com a matriz D10, features e planos, a partir de `src/modules/rbac/rbac.catalog.js` e `src/modules/plans/plans.catalog.js`. Nunca apaga permissão nem feature; sincroniza papel × permissão e plano × feature.
 
 ## Tabelas (F1)
 
@@ -44,6 +52,22 @@ PostgreSQL 16+ (CI em 17, local em 18), `pg` sem ORM e migrations com node-pg-mi
 
 - **Colunas:** `token_hash` único; `expires_at` (1 h para reset, 7 dias para verificação); `used_at`; `invalidated_at` (só o mais recente vale).
 - **Verificação:** guarda também o `email` confirmado. Se a conta mudar de e-mail, o token deixa de valer.
+
+## Tabelas da F2 (destaques)
+
+- **`companies`:**
+  - `cnpj` normalizado (14 caracteres, alfanumérico), **sem unicidade na plataforma** (evita enumeração entre tenants);
+  - `timezone` IANA; endereço em colunas `address_*`; `version` para concorrência otimista;
+  - `approved_at`/`approved_by` e `suspended_at`/`suspended_reason` preenchidos pelo Painel ZEVS.
+- **`company_branding`:** `primary_color` com `CHECK (~ '^#[0-9a-f]{6}$')`.
+- **`company_contacts`:** `UNIQUE (company_id, id)`; soft delete. Nome, e-mail, telefone e observações são dados pessoais.
+- **`company_usage`:** `storage_bytes`/`file_count` com `CHECK >= 0`; só muda pela função única (F3).
+- **`audit_logs`:**
+  - `company_id` nulo em eventos de conta;
+  - `actor_type` = `user` | `platform_admin` | `system`;
+  - `actor_user_id` nulo quando quem age é anônimo (ex.: login com senha errada);
+  - índices por empresa + data, por entidade e por entidade + ação (teto de e-mails).
+- **Ainda não criadas** (entram com o módulo que as usa): `company_settings` (F3) e `invitations` (F10).
 
 ## Ambientes locais
 

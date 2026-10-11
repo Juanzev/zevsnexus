@@ -53,6 +53,54 @@ O cliente renova a sessão (`POST /auth/refresh`) ao receber `TOKEN_EXPIRED`, ou
 
 | Método e rota | Sucesso |
 |---|---|
-| `GET /api/v1/me` (Bearer) | `200 { data: { user } }` |
+| `GET /api/v1/me` (Bearer) | `200 { data: { user, platform_admin, companies: [{ id, name, legal_name, status, membership_status, roles }] } }` |
 
-Na F2, `/me` passa a trazer também as empresas, as permissões e as features da empresa atual.
+## Empresa (tenant)
+
+Rotas de dados de empresa exigem `Authorization: Bearer …` **e** `X-Company-Id: <uuid>`. O backend confere o vínculo a cada requisição:
+
+| Situação | Resposta |
+|---|---|
+| Header ausente | `400 COMPANY_REQUIRED` |
+| Inválido, inexistente, de outra empresa ou vínculo removido | `404 COMPANY_NOT_FOUND` |
+| Empresa em análise | `403 COMPANY_PENDING` |
+| Empresa suspensa | `403 COMPANY_SUSPENDED` |
+| Vínculo suspenso | `403 MEMBERSHIP_SUSPENDED` |
+| Sem a permissão | `403 PERMISSION_DENIED` (`details.permissions`) |
+| Feature fora do plano | `403 FEATURE_DISABLED` (`details.feature`) |
+
+| Método e rota | Permissão | Corpo | Sucesso |
+|---|---|---|---|
+| `POST /api/v1/companies` (onboarding; sem `X-Company-Id`; `Idempotency-Key` obrigatório) | E-mail verificado | `{ legal_name, trade_name?, cnpj?, timezone? }` | `201 { data: { company } }` com `status: "pending"`. `403 EMAIL_NOT_VERIFIED`, `409 PENDING_COMPANY_EXISTS` |
+| `GET /api/v1/company/context` | Membro ativo | — | `{ data: { company, membership: { id, roles }, permissions[], features[], branding: { primary_color } } }` |
+| `GET /api/v1/company` | `company.view` | — | `{ data: { company } }` (perfil completo, com `address` e `version`) |
+| `PATCH /api/v1/company` | `company.manage` | `{ version, legal_name?, trade_name?, cnpj?, state_registration?, municipal_registration?, tax_regime?, email?, phone?, address?: { cep, street, number, complement, district, city, state } }` | `{ data: { company } }`. `409 VERSION_CONFLICT` (`details.current_version`). Texto vazio limpa o campo |
+| `GET /api/v1/company/settings` | `settings.manage` | — | `{ data: { settings: { timezone, primary_color } } }` |
+| `PATCH /api/v1/company/settings` | `settings.manage` | `{ timezone?, primary_color? }` (`#RRGGBB`) | `{ data: { settings } }` |
+| `GET /api/v1/company/contacts` | `company.view` | — | `{ data: { contacts: [...] } }` |
+| `POST /api/v1/company/contacts` | `company.manage` | `{ name, role_title?, email?, phone?, is_responsible?, notes? }` | `201 { data: { contact } }` |
+| `PATCH /api/v1/company/contacts/:id` | `company.manage` | Os mesmos campos, opcionais | `{ data: { contact } }`; outro tenant ou excluído → 404 |
+| `DELETE /api/v1/company/contacts/:id` | `company.manage` | — | `204` (soft delete) |
+
+**`Idempotency-Key`** (8–128 caracteres `[A-Za-z0-9_-]`):
+
+| Caso | Resposta |
+|---|---|
+| Mesma chave e mesmo corpo | Devolve a resposta salva, com `Idempotent-Replayed: true` |
+| Mesma chave e corpo diferente | `422 IDEMPOTENCY_KEY_REUSED` |
+| Ainda em andamento | `409 IDEMPOTENCY_IN_PROGRESS` |
+
+Erros não consomem a chave. A chave vale 24 h.
+
+## Painel ZEVS (`/api/v1/admin`)
+
+Exige ser Platform Admin; dono de empresa recebe `403 PLATFORM_ADMIN_REQUIRED`.
+
+| Método e rota | Corpo / query | Sucesso |
+|---|---|---|
+| `GET /admin/companies` | `?status=pending\|active\|suspended&q=&page=&limit=` (máx. 100) | `{ data: { companies: [{ …, owner: { name, email, email_verified }, members }] }, meta: { page, limit, total } }` |
+| `POST /admin/companies/:id/approve` | `{}` | `{ data: { company } }` (só `pending`; e-mail ao dono) |
+| `POST /admin/companies/:id/suspend` | `{ reason }` | `{ data: { company } }` (de `pending` ou `active`) |
+| `POST /admin/companies/:id/reactivate` | `{}` | `{ data: { company } }` (só `suspended`) |
+
+Transição inválida → `409 INVALID_COMPANY_STATUS`.

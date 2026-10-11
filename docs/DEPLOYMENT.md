@@ -53,11 +53,44 @@ Dependabot (`.github/dependabot.yml`): PRs semanais de dependências de backend,
 
 ## Deploy
 
-Ainda não há deploy.
-
-| Ambiente | Fase | O que entra |
-|---|---|---|
-| Staging | F2 | `render.yaml` (web service + Postgres), `preDeployCommand` com migrations, health check em `/ready` |
-| Produção (antes do piloto) | F5 | Plano pago, Cloudflare (SSL Full strict, segredo de origem, WAF, "Respect Existing Headers"), R2, Resend com domínio verificado, backup externo e restore testado |
-
 Regra permanente: **nenhum push sem aprovação do Juan**, porque push na `main` faz deploy.
+
+### Staging (F2) — passo a passo (feito pelo Juan)
+
+O blueprint está em [`render.yaml`](../render.yaml):
+- serviço web único, região Virginia, plano free, health check em `/ready`;
+- migrations e seed no fim do build (o plano free não tem `preDeployCommand`).
+
+1. **Banco:** crie um Postgres gratuito no Neon (ou Supabase), na região mais próxima de Virginia (`us-east`), e copie a connection string com `sslmode=require`.
+2. **GitHub:** crie o repositório privado e envie a `main`. Esse é o push que você faz.
+3. **Render:** *New → Blueprint* → escolha o repositório. O Render lê o `render.yaml`. Preencha as variáveis marcadas como `sync: false`:
+
+   | Variável | Valor |
+   |---|---|
+   | `APP_URL` | URL do serviço (`https://zevs-nexus-staging.onrender.com`), sem barra no fim |
+   | `DATABASE_URL` | Connection string do passo 1 |
+   | `PLATFORM_ADMIN_EMAILS` | Seu e-mail (vale depois de verificado) |
+   | `CF_ORIGIN_SECRET` | Deixe vazio até haver domínio no Cloudflare |
+
+   `JWT_SECRET` é gerado pelo Render.
+4. **E-mail:** com `EMAIL_PROVIDER=log` (padrão do staging) **nenhum e-mail sai**, nem o de confirmação, e sem e-mail confirmado não dá para cadastrar empresa. Para testar o fluxo completo:
+   - crie uma chave no Resend e troque `EMAIL_PROVIDER=resend` + `RESEND_API_KEY`;
+   - sem domínio verificado, o Resend só entrega para o e-mail da sua conta (remetente `onboarding@resend.dev`).
+5. **Conferir:**
+   - `https://…/health` → `{"status":"ok"}`;
+   - `/ready` → `{"status":"ready"}`;
+   - `/api/version` → o SHA do commit.
+6. **Primeiro uso:**
+   - cadastre-se com o e-mail de `PLATFORM_ADMIN_EMAILS`, confirme e entre: você cai no Painel ZEVS;
+   - com outra conta, cadastre uma empresa e aprove pelo Painel.
+
+> O plano free dorme sem tráfego (a primeira requisição demora) e os jobs param enquanto isso. É aceitável em staging. Produção vai para plano pago (Core, pág. 18).
+
+### Produção (F5, antes do piloto)
+
+| O que entra | Detalhe |
+|---|---|
+| Render | Plano pago, com `preDeployCommand: cd backend && npm run migrate && npm run seed` |
+| Cloudflare | SSL Full strict, segredo de origem (`CF_ORIGIN_SECRET` + Transform Rule), WAF, Browser Cache TTL em "Respect Existing Headers" |
+| Arquivos e e-mail | R2; Resend com domínio verificado (SPF, DKIM, DMARC) |
+| Backup | Backup externo diário do banco e dos arquivos; restore testado e registrado |
