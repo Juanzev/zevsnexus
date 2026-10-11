@@ -4,6 +4,7 @@
 
 @source "../";
 @source "../../public/index.html";
+@source "../../public/offline.html";
 
 @theme {
   --font-sans: ui-sans-serif, system-ui, -apple-system, "Segoe UI", Roboto, "Helvetica Neue", Arial, "Noto Sans", sans-serif;
@@ -208,7 +209,7 @@
   }
 
   .tab {
-    @apply flex min-h-10 shrink-0 items-center rounded-lg px-3 text-sm font-medium whitespace-nowrap text-slate-600 aria-selected:bg-white aria-selected:text-slate-900 aria-selected:shadow-xs;
+    @apply flex min-h-11 shrink-0 items-center rounded-lg px-3 text-sm font-medium whitespace-nowrap text-slate-600 aria-selected:bg-white aria-selected:text-slate-900 aria-selected:shadow-xs;
   }
 
   /* Toasts acima da barra inferior no celular. */

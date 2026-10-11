@@ -35,7 +35,12 @@ export default [
     },
   },
   {
-    files: ['scripts/**/*.js', 'tests/**/*.js'],
+    files: ['scripts/**/*.{js,mjs}', 'tests/**/*.js'],
     languageOptions: { globals: { ...globals.node } },
+  },
+  {
+    // Service worker e kill switch: rodam no escopo do worker, não da página.
+    files: ['public/*.js'],
+    languageOptions: { sourceType: 'script', globals: { ...globals.serviceworker } },
   },
 ];

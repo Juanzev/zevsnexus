@@ -57,7 +57,11 @@ const contentSecurityPolicy = {
   },
 };
 
-export function createApp({ rateLimits = !env.isTest, serveFrontend = env.SERVE_FRONTEND } = {}) {
+export function createApp({
+  rateLimits = !env.isTest,
+  serveFrontend = env.SERVE_FRONTEND,
+  swKillSwitch = env.SW_KILL_SWITCH,
+} = {}) {
   const app = express();
   const limiters = createRateLimiters({ enabled: rateLimits });
   const csrfGuard = createCsrfGuard(env.allowedOrigins);
@@ -112,7 +116,7 @@ export function createApp({ rateLimits = !env.isTest, serveFrontend = env.SERVE_
   // "R2 de mentira" de desenvolvimento e testes; não existe com STORAGE_PROVIDER=r2.
   if (usesDevStorage()) app.use('/dev-storage', createDevStorageRouter());
 
-  if (serveFrontend) app.use(createSpaRouter());
+  if (serveFrontend) app.use(createSpaRouter({ swKillSwitch }));
 
   app.use(errorHandler);
   return app;

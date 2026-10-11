@@ -4,6 +4,12 @@ import { icon } from '../lib/icons.js';
 
 async function clearCachesAndReload() {
   try {
+    // Busca o service worker novo (se houver) antes de recarregar; a página vem da rede de qualquer jeito.
+    await (await navigator.serviceWorker?.getRegistration())?.update();
+  } catch {
+    // Sem service worker ou sem rede: o reload resolve.
+  }
+  try {
     if ('caches' in window) {
       const keys = await caches.keys();
       await Promise.all(keys.map((key) => caches.delete(key)));

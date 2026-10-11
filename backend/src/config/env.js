@@ -78,6 +78,8 @@ const schema = z
     R2_ACCESS_KEY_ID: z.string().min(16).optional(),
     R2_SECRET_ACCESS_KEY: z.string().min(32).optional(),
     R2_BUCKET: z.string().regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/, 'R2_BUCKET inválido').optional(),
+    // Kill switch do service worker (pág. 11): serve em /sw.js um worker que limpa caches e se desregistra.
+    SW_KILL_SWITCH: boolean.default(false),
     UPLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(600),
     DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(10).max(600).default(60),
   })

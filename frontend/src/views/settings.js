@@ -21,6 +21,7 @@ import { icon } from '../lib/icons.js';
 import { PASSWORD_MIN_LENGTH, passwordProblem } from '../lib/text.js';
 import { BRAZIL_TIMEZONES } from '../lib/timezones.js';
 import { api } from '../services/api.js';
+import { installPlatform, isInstalled } from '../services/pwa.js';
 import { changePassword, getUser, logoutEverywhere } from '../services/session.js';
 import { can, patchContext } from '../services/tenant.js';
 
@@ -68,6 +69,54 @@ function companySettingsForm(settings) {
     })}
     <button type="submit" class="btn btn-primary">Salvar configurações</button>
   </form>`;
+}
+
+// ---------- instalar no celular (D9: só ajuda, sem banner de instalação) ----------
+
+const INSTALL_STEPS = {
+  android: {
+    title: 'Android (Chrome)',
+    steps: ['Abra o ZEVS Nexus no Chrome.', 'Toque no menu ⋮ (canto superior direito).', 'Toque em “Instalar app” ou “Adicionar à tela inicial” e confirme.'],
+  },
+  ios: {
+    title: 'iPhone e iPad (Safari)',
+    steps: [
+      'Abra o ZEVS Nexus no Safari (no iPhone, só o Safari instala).',
+      'Toque em Compartilhar (o quadrado com a seta para cima).',
+      'Toque em “Adicionar à Tela de Início” e depois em “Adicionar”.',
+    ],
+  },
+  desktop: {
+    title: 'Computador (Chrome ou Edge)',
+    steps: ['Clique no ícone de instalar na barra de endereço (ou no menu ⋮ → “Instalar ZEVS Nexus”).', 'Confirme em “Instalar”.'],
+  },
+};
+
+function installSteps({ title, steps }) {
+  return html`<div>
+    <h3 class="text-sm font-semibold text-slate-900">${title}</h3>
+    <ol class="mt-2 list-decimal space-y-1 pl-5 text-sm text-slate-600">${steps.map((step) => html`<li>${step}</li>`)}</ol>
+  </div>`;
+}
+
+function installSection() {
+  if (isInstalled()) {
+    return html`<section class="card flex items-center gap-3">
+      ${icon('circle-check', 'size-6 shrink-0 text-green-600')}
+      <p class="text-sm text-slate-700"><strong>App instalado.</strong> O ZEVS Nexus abre direto no Início e se atualiza sozinho.</p>
+    </section>`;
+  }
+  const current = installPlatform();
+  const others = Object.keys(INSTALL_STEPS).filter((platform) => platform !== current);
+  return html`<section class="card" data-install>
+    <h2 class="flex items-center gap-2 text-base font-semibold text-slate-900">${icon('smartphone', 'size-5 text-primary')} Instalar no celular</h2>
+    <p class="mt-1 text-sm text-slate-600">Com o app instalado, o Nexus abre em tela cheia, direto no Início — sem procurar no navegador.</p>
+    <div class="mt-4">${installSteps(INSTALL_STEPS[current])}</div>
+    <details class="mt-4">
+      <summary class="cursor-pointer text-sm font-medium text-primary">Outros aparelhos</summary>
+      <div class="mt-3 space-y-4">${others.map((platform) => installSteps(INSTALL_STEPS[platform]))}</div>
+    </details>
+  </section>`;
 }
 
 function accountSection(user) {
@@ -379,6 +428,7 @@ export default {
             </section>`
           : ''
       }
+      ${installSection()}
       ${accountSection(getUser())}
     </div>`,
 

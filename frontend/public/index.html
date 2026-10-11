@@ -9,7 +9,14 @@
     <meta name="color-scheme" content="light">
     <meta name="robots" content="noindex">
     <title>ZEVS Nexus</title>
+    <!-- PWA (pág. 11): manifest único, ícones PNG (o iOS exige) e metas do Safari. -->
+    <link rel="manifest" href="/manifest.webmanifest">
     <link rel="icon" href="/favicon.svg" type="image/svg+xml">
+    <link rel="apple-touch-icon" href="/icons/apple-touch-icon.png">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-title" content="Nexus">
+    <meta name="apple-mobile-web-app-status-bar-style" content="default">
     <link rel="stylesheet" href="/assets/app.css">
     <script type="module" src="/src/app.js"></script>
   </head>

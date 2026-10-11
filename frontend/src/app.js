@@ -3,6 +3,7 @@
 import { getCurrentRoute, refreshRoute, remountLayout, startRouter } from './router.js';
 import { isAuthenticated, onSessionChange, restore } from './services/session.js';
 import { onTenantChange } from './services/tenant.js';
+import { registerServiceWorker } from './services/pwa.js';
 import { startUpdateChecker } from './services/version.js';
 
 await restore();
@@ -17,4 +18,6 @@ onSessionChange(() => {
 onTenantChange(remountLayout);
 
 startUpdateChecker();
+// Direto no boot, não no evento `load` (que pode já ter passado — bug do Store).
+registerServiceWorker();
 await startRouter();

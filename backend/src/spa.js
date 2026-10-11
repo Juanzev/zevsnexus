@@ -23,15 +23,29 @@ const staticOptions = {
   },
 };
 
+/**
+ * /sw.js: o service worker normal, ou o kill switch (SW_KILL_SWITCH=true) — limpa caches, se
+ * desregistra e recarrega as abas. Sempre `no-store`: o navegador confere a cada navegação.
+ */
+function serviceWorker(killSwitch) {
+  const file = path.join(publicDir, killSwitch ? 'sw-kill-switch.js' : 'sw.js');
+  return (_req, res) => {
+    res.setHeader('Cache-Control', 'no-store');
+    res.type('application/javascript');
+    res.sendFile(file);
+  };
+}
+
 function loadIndex() {
   return readFileSync(path.join(publicDir, 'index.html'), 'utf8').replace(VERSION_PLACEHOLDER, env.appVersion);
 }
 
-export function createSpaRouter() {
+export function createSpaRouter({ swKillSwitch = env.SW_KILL_SWITCH } = {}) {
   const router = Router();
   // Em produção o index é lido uma vez; em desenvolvimento, a cada requisição.
   const cachedIndex = env.isProduction ? loadIndex() : null;
 
+  router.get('/sw.js', serviceWorker(swKillSwitch));
   router.use(express.static(publicDir, staticOptions));
   router.use('/src', express.static(srcDir, staticOptions));
 

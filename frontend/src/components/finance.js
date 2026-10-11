@@ -177,20 +177,48 @@ export function bindPartyPicker(root, { name = 'party_id', party } = {}) {
   };
 }
 
+/**
+ * Arquivo + "Tirar foto" (ARCHITECTURE §19.1): no celular, o botão abre a câmera direto
+ * (`capture="environment"`); o campo comum continua aceitando PDF, galeria e outros arquivos.
+ */
 function fileField({ name, label, hint }) {
   const id = `f-${name}`;
   return html`<div class="field">
     <label for="${id}" class="label">${label}</label>
     <input id="${id}" name="${name}" type="file" accept="${ACCEPT_ATTRIBUTE}" class="input h-auto py-2"
       aria-describedby="${id}-hint ${id}-error">
+    <div class="mt-2 flex flex-wrap items-center gap-2">
+      <button type="button" class="btn btn-secondary btn-sm lg:hidden" data-camera="${name}">${icon('camera', 'size-4')} Tirar foto</button>
+      <span class="min-w-0 truncate text-sm text-slate-600" data-camera-chosen="${name}"></span>
+    </div>
+    <input name="${name}_camera" type="file" accept="image/*" capture="environment" hidden>
     ${hint ? html`<p id="${id}-hint" class="hint">${hint}</p>` : ''}
     <p id="${id}-error" class="field-error" hidden></p>
   </div>`;
 }
 
-/** Envia o comprovante escolhido (se houver) e devolve o file_id. */
+/** Liga os botões "Tirar foto": a foto tirada substitui o arquivo escolhido (e vice-versa). */
+export function bindCameraButtons(root) {
+  for (const button of root.querySelectorAll('[data-camera]')) {
+    const name = button.dataset.camera;
+    const file = root.querySelector(`[name="${name}"]`);
+    const camera = root.querySelector(`[name="${name}_camera"]`);
+    const chosen = root.querySelector(`[data-camera-chosen="${name}"]`);
+    button.addEventListener('click', () => camera.click());
+    camera.addEventListener('change', () => {
+      file.value = '';
+      chosen.textContent = camera.files[0] ? `Foto: ${camera.files[0].name}` : '';
+    });
+    file.addEventListener('change', () => {
+      camera.value = '';
+      chosen.textContent = '';
+    });
+  }
+}
+
+/** Envia o comprovante escolhido (arquivo ou foto da câmera), se houver, e devolve o file_id. */
 async function receiptFileId(form, name) {
-  const file = form.elements[name]?.files?.[0];
+  const file = form.elements[name]?.files?.[0] ?? form.elements[`${name}_camera`]?.files?.[0];
   if (!file) return undefined;
   if (!isAcceptedFile(file)) throw fieldError(name, 'Tipo de arquivo não aceito. Use PDF ou foto (JPG, PNG).');
   return uploadFile(file);
@@ -238,6 +266,7 @@ export function openExpenseForm({ expense = null, quickPay = false, categories =
       ${textareaField({ name: 'notes', label: 'Observações', value: expense?.notes ?? '', maxlength: 2000 })}`,
     onMount: (dialog) => {
       picker = bindPartyPicker(dialog, { party: expense?.party });
+      bindCameraButtons(dialog);
     },
     onSubmit: async (form) => {
       const values = form.elements;
@@ -292,6 +321,7 @@ export function openPaymentForm(expense) {
       ${field({ name: 'reference', label: 'Referência (opcional)', required: false, hint: 'Ex.: número do boleto, ID da transação.' })}
       ${fileField({ name: 'receipt_file_id', label: 'Comprovante', hint: 'PDF ou foto. Fica guardado na pasta de comprovantes.' })}
       ${textareaField({ name: 'notes', label: 'Observações', maxlength: 500 })}`,
+    onMount: bindCameraButtons,
     onSubmit: async (form) => {
       const values = form.elements;
       const amount = parseMoney(values.amount_cents.value);
@@ -336,6 +366,7 @@ export function openAttachForm({ title = 'Anexar documento', withRole = false, o
     body: html`
       ${withRole ? selectField({ name: 'role', label: 'O que é', options: ATTACHMENT_ROLES, value: 'boleto' }) : ''}
       ${fileField({ name: 'file_id', label: 'Arquivo', hint: 'PDF, imagem, planilha ou documento de texto.' })}`,
+    onMount: bindCameraButtons,
     onSubmit: async (form) => {
       const fileId = await receiptFileId(form, 'file_id');
       if (!fileId) throw fieldError('file_id', 'Escolha o arquivo.');
