@@ -1,0 +1,91 @@
+# Blueprint do Render (ZEVS STRUCTURE pág. 18) — PRODUÇÃO (ARCHITECTURE §24.1, FASE-0 D13).
+# Criado e operado pelo Juan (a IA não mexe em produção). Passo a passo em docs/PRODUCTION.md.
+# Ao criar o Blueprint no Render, aponte para este arquivo (o staging continua em render.yaml).
+#
+# Diferenças para o staging:
+# - plano pago (não hiberna) para o web service e para o Postgres (o free expira);
+# - migrations + seed no preDeployCommand: se falharem, o deploy não entra no ar;
+# - e-mail real (Resend) e arquivos no bucket R2 de produção.
+#
+# Confira no painel os nomes de plano vigentes do Render (web: starter; Postgres: ex. basic-256mb).
+# Segredos: `sync: false` = preencher no painel do Render; nunca neste arquivo.
+services:
+  - type: web
+    name: zevs-nexus
+    runtime: node
+    region: virginia
+    plan: starter
+    branch: main
+    autoDeploy: true
+    healthCheckPath: /ready
+    # O frontend instala devDependencies (Tailwind): com NODE_ENV=production o npm pularia o build do CSS.
+    buildCommand: >-
+      cd frontend && npm ci --include=dev && npm run build &&
+      cd ../backend && npm ci --omit=dev
+    preDeployCommand: cd backend && npm run migrate && npm run seed
+    startCommand: cd backend && npm start
+    envVars:
+      - key: NODE_ENV
+        value: production
+      - key: NODE_VERSION
+        value: "24"
+      - key: LOG_LEVEL
+        value: info
+      # URL pública (https), sem barra no fim: o domínio quando existir (D13.2); até lá, a *.onrender.com.
+      - key: APP_URL
+        sync: false
+      # Banco do próprio Render, pela rede interna (sem SSL nessa conexão).
+      - key: DATABASE_URL
+        fromDatabase:
+          name: zevs-nexus-db
+          property: connectionString
+      - key: DATABASE_SSL
+        value: "false"
+      - key: DATABASE_POOL_MAX
+        value: "10"
+      - key: JWT_SECRET
+        generateValue: true
+      - key: BCRYPT_ROUNDS
+        value: "12"
+      - key: SERVE_FRONTEND
+        value: "true"
+      - key: TRUST_PROXY
+        value: "1"
+      # Segredo da Transform Rule do Cloudflare (X-Origin-Auth). Vazio enquanto não houver domínio no Cloudflare.
+      - key: CF_ORIGIN_SECRET
+        sync: false
+      - key: EMAIL_PROVIDER
+        value: resend
+      - key: RESEND_API_KEY
+        sync: false
+      # Ex.: ZEVS Nexus <no-reply@SEU-DOMINIO> — domínio verificado no Resend (SPF, DKIM, DMARC).
+      - key: EMAIL_FROM
+        sync: false
+      - key: PLATFORM_ADMIN_EMAILS
+        sync: false
+      - key: TRIAL_DAYS
+        value: "30"
+      - key: JOBS_ENABLED
+        value: "true"
+      # Kill switch do service worker (docs/PRODUCTION.md): só "true" se um SW ruim chegar a produção.
+      - key: SW_KILL_SWITCH
+        value: "false"
+      # Bucket R2 de PRODUÇÃO (privado; CORS só para APP_URL). Token só deste bucket.
+      - key: STORAGE_PROVIDER
+        value: r2
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false
+
+databases:
+  - name: zevs-nexus-db
+    region: virginia
+    plan: basic-256mb
+    postgresMajorVersion: "17"
+    databaseName: zevs_nexus
+    user: zevs_nexus

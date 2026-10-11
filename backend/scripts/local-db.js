@@ -4,10 +4,11 @@
 //
 // Uso: npm run db:local -- <setup|init|start|stop|status|createdb>
 import { spawn, spawnSync } from 'node:child_process';
-import { existsSync, mkdirSync, readdirSync } from 'node:fs';
+import { existsSync, mkdirSync } from 'node:fs';
 import path from 'node:path';
 import { fileURLToPath } from 'node:url';
 import pg from 'pg';
+import { pgBin as bin } from './lib/local-tools.js';
 
 const root = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../..');
 const localDir = path.join(root, '.local');
@@ -15,25 +16,6 @@ const dataDir = path.join(localDir, 'pg-data');
 const logFile = path.join(localDir, 'pg.log');
 const port = process.env.LOCAL_PG_PORT ?? '5434';
 const databases = ['zevs_nexus_dev', 'zevs_nexus_test', 'zevs_nexus_e2e_test'];
-
-function findWindowsPgBin() {
-  const base = 'C:\\Program Files\\PostgreSQL';
-  if (!existsSync(base)) return null;
-  const versions = readdirSync(base)
-    .filter((name) => /^\d+$/.test(name))
-    .sort((a, b) => Number(b) - Number(a));
-  for (const version of versions) {
-    const dir = path.join(base, version, 'bin');
-    if (existsSync(path.join(dir, 'initdb.exe'))) return dir;
-  }
-  return null;
-}
-
-function bin(name) {
-  const dir = process.env.PG_BIN ?? (process.platform === 'win32' ? findWindowsPgBin() : null);
-  const exe = process.platform === 'win32' ? `${name}.exe` : name;
-  return dir ? path.join(dir, exe) : exe;
-}
 
 function run(name, args) {
   const result = spawnSync(bin(name), args, { stdio: 'inherit' });

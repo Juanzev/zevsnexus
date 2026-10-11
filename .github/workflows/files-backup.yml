@@ -1,0 +1,64 @@
+# Backup diário dos ARQUIVOS de produção (D12f, decidido na F5; ARCHITECTURE §24.1).
+# rclone copy do bucket R2 de produção para um bucket de backup:
+# - só companies/*/files/** (as chaves de envio temporárias ficam de fora);
+# - COPY, nunca sync: apagar em produção não apaga o backup;
+# - --immutable: a chave de arquivo nunca é reescrita; se algo mudou, o job falha e avisa.
+# Às 03h de Manaus (07h UTC, depois do backup do banco) e por botão.
+# Segredos (Settings → Secrets → Actions), cadastrados pelo Juan — tokens próprios, não os do app:
+#   R2_ACCOUNT_ID             ID da conta Cloudflare (32 caracteres hexadecimais)
+#   R2_SOURCE_ACCESS_KEY_ID   token SÓ LEITURA no bucket de produção
+#   R2_SOURCE_SECRET_KEY
+#   R2_SOURCE_BUCKET          ex.: nexus-prod
+#   R2_BACKUP_ACCESS_KEY_ID   token de leitura e escrita SÓ no bucket de backup
+#   R2_BACKUP_SECRET_KEY
+#   R2_BACKUP_BUCKET          ex.: nexus-prod-backup
+name: Backup dos arquivos
+
+on:
+  schedule:
+    - cron: '0 7 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: files-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 120
+    env:
+      RCLONE_CONFIG_SRC_TYPE: s3
+      RCLONE_CONFIG_SRC_PROVIDER: Cloudflare
+      RCLONE_CONFIG_SRC_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      RCLONE_CONFIG_SRC_ACCESS_KEY_ID: ${{ secrets.R2_SOURCE_ACCESS_KEY_ID }}
+      RCLONE_CONFIG_SRC_SECRET_ACCESS_KEY: ${{ secrets.R2_SOURCE_SECRET_KEY }}
+      RCLONE_CONFIG_SRC_NO_CHECK_BUCKET: 'true'
+      RCLONE_CONFIG_DST_TYPE: s3
+      RCLONE_CONFIG_DST_PROVIDER: Cloudflare
+      RCLONE_CONFIG_DST_ENDPOINT: https://${{ secrets.R2_ACCOUNT_ID }}.r2.cloudflarestorage.com
+      RCLONE_CONFIG_DST_ACCESS_KEY_ID: ${{ secrets.R2_BACKUP_ACCESS_KEY_ID }}
+      RCLONE_CONFIG_DST_SECRET_ACCESS_KEY: ${{ secrets.R2_BACKUP_SECRET_KEY }}
+      RCLONE_CONFIG_DST_NO_CHECK_BUCKET: 'true'
+      SOURCE_BUCKET: ${{ secrets.R2_SOURCE_BUCKET }}
+      BACKUP_BUCKET: ${{ secrets.R2_BACKUP_BUCKET }}
+    steps:
+      - name: rclone (pacote do Ubuntu)
+        run: sudo apt-get update -qq && sudo apt-get install -y -qq rclone && rclone version
+
+      - name: Copiar os arquivos novos
+        run: |
+          if [ -z "$SOURCE_BUCKET" ] || [ -z "$BACKUP_BUCKET" ]; then echo "::error::Segredos dos buckets não cadastrados."; exit 1; fi
+          rclone copy "src:$SOURCE_BUCKET" "dst:$BACKUP_BUCKET" \
+            --include "companies/*/files/**" \
+            --immutable \
+            --transfers 8 --checkers 16 \
+            --stats-one-line --stats 1m --log-level INFO
+
+      - name: Conferir (todo arquivo de produção existe no backup)
+        run: |
+          rclone check "src:$SOURCE_BUCKET" "dst:$BACKUP_BUCKET" \
+            --include "companies/*/files/**" --one-way --size-only --log-level NOTICE

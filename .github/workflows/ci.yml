@@ -56,6 +56,11 @@ jobs:
           npm run migrate:down -- all
           npm run migrate
       - run: npm test
+      - name: Ensaio de produção (NODE_ENV=production + fluxo ponta a ponta)
+        if: matrix.node == 24
+        env:
+          LOCAL_PG_BASE: postgres://postgres:postgres@localhost:5432
+        run: npm run prod:rehearsal
       - name: Auditoria das dependências de produção
         run: npm run audit
 

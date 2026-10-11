@@ -1,0 +1,54 @@
+# Backup externo diário do banco de PRODUÇÃO (STRUCTURE pág. 19, ARCHITECTURE §24.1, D12b).
+# pg_dump -Fc → artefato PRIVADO do GitHub, retenção de 30 dias. Às 02h de Manaus (06h UTC) e por botão.
+# Segredo necessário (Settings → Secrets → Actions), cadastrado pelo Juan:
+#   PROD_DATABASE_URL  External Database URL do Postgres do Render, com ?sslmode=require
+# Restaurar e conferir: npm run db:restore-check -- <arquivo.dump> (docs/PRODUCTION.md).
+name: Backup do banco
+
+on:
+  schedule:
+    - cron: '0 6 * * *'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: db-backup
+  cancel-in-progress: false
+
+jobs:
+  backup:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - name: Cliente do PostgreSQL 17 (mesma versão do servidor)
+        run: |
+          sudo install -d /usr/share/postgresql-common/pgdg
+          sudo curl -fsSL -o /usr/share/postgresql-common/pgdg/apt.postgresql.org.asc https://www.postgresql.org/media/keys/ACCC4CF8.asc
+          echo "deb [signed-by=/usr/share/postgresql-common/pgdg/apt.postgresql.org.asc] https://apt.postgresql.org/pub/repos/apt $(lsb_release -cs)-pgdg main" | sudo tee /etc/apt/sources.list.d/pgdg.list
+          sudo apt-get update -qq
+          sudo apt-get install -y -qq postgresql-client-17
+
+      - name: pg_dump
+        env:
+          PROD_DATABASE_URL: ${{ secrets.PROD_DATABASE_URL }}
+        run: |
+          if [ -z "$PROD_DATABASE_URL" ]; then echo "::error::Segredo PROD_DATABASE_URL não cadastrado."; exit 1; fi
+          stamp=$(TZ=America/Manaus date +%Y%m%d-%H%M)
+          echo "STAMP=$stamp" >> "$GITHUB_ENV"
+          /usr/lib/postgresql/17/bin/pg_dump --format=custom --no-owner --no-privileges --file "nexus-$stamp.dump" "$PROD_DATABASE_URL"
+          # Conferência mínima: o arquivo abre e tem as tabelas principais.
+          /usr/lib/postgresql/17/bin/pg_restore --list "nexus-$stamp.dump" > toc.txt
+          for table in companies expenses expense_payments documents files audit_logs; do
+            grep -q "TABLE public $table " toc.txt || { echo "::error::Tabela $table ausente no dump."; exit 1; }
+          done
+          ls -lh "nexus-$stamp.dump"
+
+      - name: Artefato privado (30 dias)
+        uses: actions/upload-artifact@v4
+        with:
+          name: nexus-db-${{ env.STAMP }}
+          path: nexus-${{ env.STAMP }}.dump
+          retention-days: 30
+          if-no-files-found: error
