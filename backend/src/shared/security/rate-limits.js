@@ -53,5 +53,7 @@ export function createRateLimiters({ enabled }) {
     // Por usuário autenticado (rotas atrás do tenantRouter): envio em lote é normal, abuso não.
     uploadIntents: make({ windowMs: 60 * MINUTE, limit: 200, keyGenerator: userKey }),
     downloadUrls: make({ windowMs: 60 * MINUTE, limit: 600, keyGenerator: userKey }),
+    // Prévia de planilha: baixa e lê o arquivo no servidor.
+    previews: make({ windowMs: 60 * MINUTE, limit: 600, keyGenerator: userKey }),
   };
 }

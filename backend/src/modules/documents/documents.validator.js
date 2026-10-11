@@ -44,9 +44,13 @@ export const trashListQuery = z
   })
   .strict();
 
+/** Ano de referência de planilha (sugerido pela data de modificação do arquivo; ignorado nos outros tipos). */
+const referenceYear = z.number().int().min(1990, 'Ano inválido.').max(2100, 'Ano inválido.');
+
 export const documentCreateBody = z
   .object({
     file_id: uuid,
+    reference_year: referenceYear.optional(),
     folder_id: optionalNullable(uuid),
     title: optionalNullable(title),
     description: optionalNullable(description),
@@ -72,6 +76,7 @@ export const documentMoveBody = z.object({ folder_id: uuid.nullable() }).strict(
 export const versionCreateBody = z
   .object({
     file_id: uuid,
+    reference_year: referenceYear.optional(),
     comment: optionalNullable(text(500, { label: 'Comentário' })),
   })
   .strict();

@@ -3,10 +3,11 @@
 // Mutação por id só depois do documento travado (FOR UPDATE); auditoria na mesma transação.
 import { withTenant } from '../../shared/db.js';
 import { ConflictError, NotFoundError, ValidationError } from '../../shared/errors.js';
-import { isInlineAllowed, titleFromFilename } from '../../shared/files.js';
+import { isInlineAllowed, SPREADSHEET_EXTENSIONS, titleFromFilename } from '../../shared/files.js';
 import { addDays, todayIn } from '../../shared/timezones.js';
 import { auditChanges, PERSONAL_DATA, recordAudit } from '../audit/audit.service.js';
 import * as filesService from '../files/files.service.js';
+import { spreadsheetsRepository } from '../spreadsheets/spreadsheets.repository.js';
 import { assertActiveType, createDefaultTypes, normalizeTagNames, setDocumentTags } from './catalog.service.js';
 import { documentsRepository, EXPIRING_DAYS } from './documents.repository.js';
 import { foldersRepository } from './folders.repository.js';
@@ -54,6 +55,23 @@ function expiryStatus(expiresOn, today) {
 
 function today(ctx) {
   return todayIn(ctx.timezone);
+}
+
+/**
+ * Planilha (xlsx, xls, csv, ods) ganha a linha em `spreadsheets` (ARCHITECTURE §13.1.1). O ano vem da
+ * tela (data de modificação do arquivo) ou, sem ele, é o ano corrente no fuso da empresa.
+ */
+async function registerSpreadsheet(client, ctx, documentId, extension, referenceYear) {
+  if (!SPREADSHEET_EXTENSIONS.includes(extension)) return;
+  const year = referenceYear ?? Number(today(ctx).slice(0, 4));
+  if (await spreadsheetsRepository(client).register(ctx.companyId, documentId, year)) {
+    await recordAudit(client, ctx, {
+      action: 'spreadsheet.registered',
+      entityType: 'document',
+      entityId: documentId,
+      metadata: { extension, reference_year: year },
+    });
+  }
 }
 
 export function toDocument(row, todayDate) {
@@ -168,6 +186,7 @@ export async function createFromUpload(client, ctx, fileId, input = {}) {
   });
   await repo.insertVersion(ctx.companyId, id, { fileId: claimed.id, comment: null, userId: ctx.userId });
   if (input.tags?.length) await setDocumentTags(client, ctx.companyId, id, input.tags);
+  await registerSpreadsheet(client, ctx, id, claimed.extension, input.reference_year);
   await recordAudit(client, ctx, {
     action: 'document.uploaded',
     entityType: 'document',
@@ -235,6 +254,7 @@ export async function addVersion(ctx, id, input) {
       userId: ctx.userId,
     });
     await repo.update(ctx.companyId, id, {}, ctx.userId);
+    await registerSpreadsheet(client, ctx, id, claimed.extension, input.reference_year);
     await recordAudit(client, ctx, {
       action: 'document.version_added',
       entityType: 'document',
@@ -338,19 +358,23 @@ export function moveDocument(ctx, id, input) {
   });
 }
 
+/** Arquiva ou desarquiva na transação dada (o documento é travado aqui). Devolve se mudou. */
+export async function applyArchived(client, ctx, id, archived) {
+  const doc = await lockActive(client, ctx, id);
+  if (Boolean(doc.archived_at) === archived) return false;
+  await documentsRepository(client).update(ctx.companyId, id, { archived_at: archived ? new Date() : null }, ctx.userId);
+  await recordAudit(client, ctx, {
+    action: archived ? 'document.archived' : 'document.unarchived',
+    entityType: 'document',
+    entityId: id,
+  });
+  return true;
+}
+
 function setArchived(ctx, id, archived) {
   return withTenant(ctx.companyId, async (client) => {
-    const repo = documentsRepository(client);
-    const doc = await lockActive(client, ctx, id);
-    if (Boolean(doc.archived_at) !== archived) {
-      await repo.update(ctx.companyId, id, { archived_at: archived ? new Date() : null }, ctx.userId);
-      await recordAudit(client, ctx, {
-        action: archived ? 'document.archived' : 'document.unarchived',
-        entityType: 'document',
-        entityId: id,
-      });
-    }
-    return toDocument(await repo.find(ctx.companyId, ctx.membershipId, id), today(ctx));
+    await applyArchived(client, ctx, id, archived);
+    return toDocument(await documentsRepository(client).find(ctx.companyId, ctx.membershipId, id), today(ctx));
   });
 }
 
