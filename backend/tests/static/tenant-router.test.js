@@ -10,6 +10,13 @@ const NOT_TENANT = {
   'auth/auth.routes.js': 'público (cadastro, login) e conta do próprio usuário (/me)',
   'companies/onboarding.routes.js': 'cria a empresa: o tenant ainda não existe',
   'platform/platform.routes.js': 'Painel ZEVS: eixo de plataforma (requirePlatformAdmin + withSystem)',
+  'storage/dev-storage.routes.js': 'storage de dev/teste: autorizado pelo token assinado, como uma URL do R2',
+};
+
+// Como cada exceção se autoriza (nunca rota aberta onde há dado de conta, plataforma ou arquivo).
+const AUTHORIZED_BY = {
+  'auth/auth.routes.js': null,
+  'storage/dev-storage.routes.js': /verifyDevToken/,
 };
 
 const routeFiles = readdirSync(modulesDir, { recursive: true })
@@ -24,8 +31,9 @@ describe('guarda estática de rotas', () => {
   test.each(routeFiles)('%s', (file) => {
     const source = readFileSync(path.join(modulesDir, file), 'utf8');
     if (NOT_TENANT[file]) {
-      // Fora do tenant, mas nunca sem autenticação onde há dado de conta ou de plataforma.
-      if (file !== 'auth/auth.routes.js') expect(source).toMatch(/authenticate/);
+      // Fora do tenant, mas nunca sem autenticação onde há dado de conta, de plataforma ou arquivo.
+      const guard = file in AUTHORIZED_BY ? AUTHORIZED_BY[file] : /authenticate/;
+      if (guard) expect(source).toMatch(guard);
       return;
     }
     expect(source).toMatch(/tenantRouter\(\)/);

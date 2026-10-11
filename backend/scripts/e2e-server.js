@@ -1,5 +1,5 @@
 // Servidor do E2E (Playwright): banco *_e2e_test recriado do zero, migrations e a app servindo a SPA.
-// E-mails em modo log, gravados em e2e/.outbox para o teste ler os links.
+// E-mails em modo log, gravados em e2e/.outbox para o teste ler os links; arquivos no provider memory.
 // Rate limits desligados: a suíte faz muitos cadastros do mesmo IP; os limites têm testes próprios
 // (backend/tests/security/rate-limit.test.js).
 import { mkdirSync, rmSync } from 'node:fs';
@@ -29,6 +29,8 @@ Object.assign(process.env, {
   EMAIL_OUTBOX_DIR: outboxDir,
   JOBS_ENABLED: 'false',
   PLATFORM_ADMIN_EMAILS: 'admin-zevs@exemplo.local',
+  // Arquivos em memória, servidos por /dev-storage/* nesta mesma origem.
+  STORAGE_PROVIDER: 'memory',
 });
 
 rmSync(outboxDir, { recursive: true, force: true });

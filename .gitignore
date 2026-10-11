@@ -6,7 +6,7 @@ node_modules/
 .env.*
 !.env.example
 
-# Banco local de desenvolvimento/teste (cluster próprio na porta 5433)
+# Banco local de desenvolvimento/teste (cluster próprio na porta 5434)
 .local/
 
 # Armazenamento local (provider "local", só desenvolvimento)

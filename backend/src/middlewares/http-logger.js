@@ -4,6 +4,14 @@ import { pinoHttp } from 'pino-http';
 import { logger } from '../shared/logger.js';
 
 const QUIET_PREFIXES = ['/src/', '/assets/', '/vendor/', '/health'];
+// O token das rotas de storage de dev é a própria "URL assinada": nunca vai para log.
+const SIGNED_PATH = /^(\/dev-storage\/(?:upload|download)\/)[^/?]+/;
+
+export function loggableUrl(url) {
+  return String(url ?? '')
+    .split('?')[0]
+    .replace(SIGNED_PATH, '$1[redacted]');
+}
 
 export const httpLogger = pinoHttp({
   logger,
@@ -19,7 +27,7 @@ export const httpLogger = pinoHttp({
   },
   customProps: (req) => ({ userId: req.user?.id, ip: req.clientIp }),
   serializers: {
-    req: (req) => ({ id: req.id, method: req.method, url: String(req.url ?? '').split('?')[0] }),
+    req: (req) => ({ id: req.id, method: req.method, url: loggableUrl(req.url) }),
     res: (res) => ({ statusCode: res.statusCode }),
   },
 });

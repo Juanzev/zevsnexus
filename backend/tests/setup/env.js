@@ -15,8 +15,10 @@ Object.assign(process.env, {
   JOBS_ENABLED: 'false',
   PLATFORM_ADMIN_EMAILS: 'admin-zevs@teste.zevs.local',
   TRIAL_DAYS: '30',
+  STORAGE_PROVIDER: 'memory',
 });
 delete process.env.DEFAULT_PLAN;
 delete process.env.EMAIL_OUTBOX_DIR;
 delete process.env.CF_ORIGIN_SECRET;
 delete process.env.RENDER_GIT_COMMIT;
+for (const key of ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET']) delete process.env[key];

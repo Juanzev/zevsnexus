@@ -60,3 +60,14 @@ services:
         value: "30"
       - key: JOBS_ENABLED
         value: "true"
+      # Arquivos no Cloudflare R2 (bucket privado do staging + CORS só para APP_URL; ver docs/DEPLOYMENT.md).
+      - key: STORAGE_PROVIDER
+        value: r2
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
+      - key: R2_BUCKET
+        sync: false

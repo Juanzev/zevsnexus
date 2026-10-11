@@ -71,6 +71,15 @@ const schema = z
     // Plano e período de teste de empresa nova (pág. 13). Sem DEFAULT_PLAN, vale o plano padrão do catálogo.
     DEFAULT_PLAN: z.string().regex(/^[a-z_]+$/).optional(),
     TRIAL_DAYS: z.coerce.number().int().min(0).max(365).default(30),
+    // Armazenamento (ARCHITECTURE §10): r2 em staging/produção; local (disco) em dev; memory em teste.
+    STORAGE_PROVIDER: z.enum(['r2', 'local', 'memory']).optional(),
+    STORAGE_LOCAL_DIR: z.string().min(1).default('../.storage'),
+    R2_ACCOUNT_ID: z.string().regex(/^[a-f0-9]{32}$/, 'R2_ACCOUNT_ID inválido').optional(),
+    R2_ACCESS_KEY_ID: z.string().min(16).optional(),
+    R2_SECRET_ACCESS_KEY: z.string().min(32).optional(),
+    R2_BUCKET: z.string().regex(/^[a-z0-9][a-z0-9-]{1,61}[a-z0-9]$/, 'R2_BUCKET inválido').optional(),
+    UPLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(60).max(3600).default(600),
+    DOWNLOAD_URL_TTL_SECONDS: z.coerce.number().int().min(10).max(600).default(60),
   })
   .superRefine((cfg, ctx) => {
     if (cfg.CORS_ORIGIN.includes('*')) {
@@ -79,7 +88,16 @@ const schema = z
     if (cfg.EMAIL_PROVIDER === 'resend' && !cfg.RESEND_API_KEY) {
       ctx.addIssue({ code: 'custom', path: ['RESEND_API_KEY'], message: 'obrigatória com EMAIL_PROVIDER=resend' });
     }
+    const provider = cfg.STORAGE_PROVIDER ?? (cfg.NODE_ENV === 'test' ? 'memory' : 'local');
+    if (provider === 'r2') {
+      for (const key of ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET']) {
+        if (!cfg[key]) ctx.addIssue({ code: 'custom', path: [key], message: 'obrigatória com STORAGE_PROVIDER=r2' });
+      }
+    }
     if (cfg.NODE_ENV === 'production') {
+      if (provider !== 'r2') {
+        ctx.addIssue({ code: 'custom', path: ['STORAGE_PROVIDER'], message: 'produção exige STORAGE_PROVIDER=r2' });
+      }
       if (!cfg.APP_URL.startsWith('https://')) {
         ctx.addIssue({ code: 'custom', path: ['APP_URL'], message: 'precisa ser https em produção' });
       }
@@ -108,6 +126,7 @@ export function loadEnv(source) {
     secureCookies: appUrl.protocol === 'https:',
     allowedOrigins: Object.freeze([...new Set([appUrl.origin, ...cfg.CORS_ORIGIN])]),
     appVersion: cfg.RENDER_GIT_COMMIT ?? 'dev',
+    storageProvider: cfg.STORAGE_PROVIDER ?? (cfg.NODE_ENV === 'test' ? 'memory' : 'local'),
   });
 }
 

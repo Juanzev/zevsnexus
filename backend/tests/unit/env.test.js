@@ -48,11 +48,36 @@ describe('loadEnv', () => {
     expect(() => loadEnv({ ...base, EMAIL_PROVIDER: 'resend' })).toThrow(/RESEND_API_KEY/);
   });
 
+  // Credenciais fictícias, só no formato.
+  const r2 = {
+    STORAGE_PROVIDER: 'r2',
+    R2_ACCOUNT_ID: '0123456789abcdef0123456789abcdef',
+    R2_ACCESS_KEY_ID: 'chave-de-acesso-ficticia',
+    R2_SECRET_ACCESS_KEY: 'segredo-ficticio-com-mais-de-32-caracteres',
+    R2_BUCKET: 'nexus-staging',
+  };
+
   test('produção exige https e bcrypt >= 12', () => {
-    const prod = { ...base, NODE_ENV: 'production', APP_URL: 'https://nexus.exemplo.com.br' };
+    const prod = { ...base, ...r2, NODE_ENV: 'production', APP_URL: 'https://nexus.exemplo.com.br' };
     expect(() => loadEnv(prod)).not.toThrow();
     expect(() => loadEnv({ ...prod, APP_URL: 'http://nexus.exemplo.com.br' })).toThrow(/APP_URL/);
     expect(() => loadEnv({ ...prod, BCRYPT_ROUNDS: '10' })).toThrow(/BCRYPT_ROUNDS/);
+  });
+
+  test('storage: local em dev, memory em teste, r2 obrigatório em produção', () => {
+    expect(loadEnv(base).storageProvider).toBe('local');
+    expect(loadEnv({ ...base, NODE_ENV: 'test' }).storageProvider).toBe('memory');
+    const prod = { ...base, NODE_ENV: 'production', APP_URL: 'https://nexus.exemplo.com.br' };
+    expect(() => loadEnv(prod)).toThrow(/STORAGE_PROVIDER/);
+    expect(() => loadEnv({ ...prod, STORAGE_PROVIDER: 'local' })).toThrow(/STORAGE_PROVIDER/);
+    expect(loadEnv({ ...prod, ...r2 }).storageProvider).toBe('r2');
+  });
+
+  test('r2 exige as quatro variáveis da conta', () => {
+    for (const key of ['R2_ACCOUNT_ID', 'R2_ACCESS_KEY_ID', 'R2_SECRET_ACCESS_KEY', 'R2_BUCKET']) {
+      expect(() => loadEnv({ ...base, ...r2, [key]: undefined })).toThrow(new RegExp(key));
+    }
+    expect(() => loadEnv({ ...base, ...r2, R2_BUCKET: 'Bucket_Invalido' })).toThrow(/R2_BUCKET/);
   });
 
   test('cookies seguros quando APP_URL é https', () => {
