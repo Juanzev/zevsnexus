@@ -117,7 +117,7 @@ Regras de fronteira:
 
 ### 5.1 Registrar pagamento já feito ("Já paguei")
 
-1. `POST /api/v1/files/upload-intents` para o comprovante (se houver foto ou arquivo) → upload direto ao R2 → `POST /api/v1/files/:id/confirm`.
+1. `POST /api/v1/files/upload-intents` para o comprovante (se houver foto ou arquivo) → upload direto ao R2. A confirmação do arquivo acontece no passo 2 (ver §10.3).
 2. `POST /api/v1/expenses` com `{ description, party_id, category_id, amount_cents, due_date, payment: { paid_on, amount_cents, method, file_id } }` e `Idempotency-Key`.
 3. Numa única transação: cria a despesa, cria o pagamento, atualiza `paid_amount_cents` e `status = paid`, cria o documento do comprovante na pasta padrão (via `documents.service`), cria o vínculo em `expense_documents` e grava a auditoria.
 
@@ -128,19 +128,20 @@ sequenceDiagram
   participant B as Navegador
   participant A as API
   participant S as R2
-  B->>A: POST /files/upload-intents {name, size, type, purpose}
+  B->>A: POST /files/upload-intents {name, size, type}
   A->>A: permissão · allowlist (extensão + MIME) · tamanho · cota (pré-checagem)
   A->>A: INSERT files (pending, expires_at = +24 h)
-  A-->>B: {file_id, url PUT pré-assinada (10 min), headers assinados}
-  B->>S: PUT (Content-Type e Content-Length iguais aos assinados)
-  B->>A: POST /files/:id/confirm (Idempotency-Key)
-  A->>S: HEAD (tamanho confere?)
-  A->>S: GET Range 0–8 KB (magic bytes conferem com o tipo declarado?)
-  A->>A: TX: cota atômica · files → ready · document / version · auditoria
+  A-->>B: {file_id, url PUT pré-assinada (10 min) para a chave de envio, headers assinados}
+  B->>S: PUT uploads/<file_id> (Content-Type e Content-Length iguais aos assinados)
+  B->>A: POST /documents {file_id, …} (Idempotency-Key)
+  A->>S: HEAD uploads/<file_id> (tamanho confere? ETag)
+  A->>S: GET Range 0–4 KB, If-Match ETag (magic bytes conferem?)
+  A->>S: COPY uploads/<file_id> → files/<file_id>, se a ETag ainda for a mesma
+  A->>A: TX: cota atômica · files → ready · documento / versão · auditoria
   A-->>B: documento criado
 ```
 
-Se a validação falhar, o objeto é apagado, `files.status` vira `rejected` e a resposta é 422.
+Se a validação falhar, `files.status` vira `rejected` e a resposta é 422. Nenhuma rota apaga objeto: a chave de envio é removida pelo job.
 
 ### 5.3 Download
 
@@ -361,8 +362,9 @@ Todas têm `id`, `company_id`, `created_at`, `updated_at` e, onde fizer sentido,
 StorageProvider
   createUploadUrl({ key, contentType, contentLength, expiresIn }) → { url, headers }
   createDownloadUrl({ key, filename, contentType, disposition, expiresIn }) → url
-  head(key)                → { size, contentType } | null
-  readRange(key, from, to) → Buffer
+  head(key)                → { size, contentType, etag } | null
+  readRange(key, from, to, { ifMatch }) → Buffer
+  copy(fromKey, toKey, { ifMatch })
   getStream(key)           → Readable        (prévia e importação de planilhas)
   delete(key)
 ```
@@ -375,7 +377,7 @@ StorageProvider
 
 ### 10.2 Regras
 
-- **Chave:** `companies/<company_id>/files/<file_id>`, sem nome original e sem extensão. Path traversal é impossível por construção.
+- **Chave:** `companies/<company_id>/files/<file_id>`, sem nome original e sem extensão. Path traversal é impossível por construção. O navegador envia para a **chave de envio** `companies/<company_id>/uploads/<file_id>`; só o servidor escreve na chave definitiva (ver §10.3).
 - **Nome exibido:** o original, sanitizado (sem caracteres de controle e sem separadores de caminho, até 200 caracteres). No download vai em `Content-Disposition` com `filename*=UTF-8''…` (RFC 5987) e sem CR/LF.
 - **Allowlist:** `pdf, xml, xlsx, xls, csv, ods, docx, doc, odt, txt, jpg, jpeg, png, webp`, checada em três pontos: extensão, MIME declarado e **magic bytes** na confirmação. Bloqueados: executáveis, scripts, HTML, SVG, arquivos com macro (`xlsm`, `docm`) e compactados.
 - **Tamanho:** até 25 MB por arquivo (parâmetro do plano). O `Content-Length` vai **assinado** na URL de PUT.
@@ -383,7 +385,7 @@ StorageProvider
 - **URLs:** PUT de 10 min; GET de 60 s. Nunca vão para log (a redaction tira query strings). `Referrer-Policy: no-referrer` nas respostas da API.
 - **CSP:** `connect-src` e `img-src` incluem o endpoint S3 da conta R2. A prévia de PDF abre em nova aba, sem `frame-src`.
 - **Isolamento de conteúdo:** arquivos enviados são servidos pelo domínio do R2, nunca pela origem do app. Um HTML ou PDF malicioso não tem acesso a cookies nem ao DOM do Nexus.
-- **Limpeza (job):** `files` em `pending` com `expires_at` vencido → apaga o objeto e a linha (de hora em hora).
+- **Limpeza (job, de hora em hora):** `files` em `pending` com `expires_at` vencido → apaga o objeto de envio e a linha; chave de envio de arquivo já confirmado ou recusado → apagada depois que a URL de PUT expira.
 - **Exclusão física** só por job, depois da retenção da lixeira (F10). Nenhuma rota apaga um objeto do storage diretamente.
 - **Backup de arquivos (D12f):** cópia diária dos objetos novos para um segundo bucket. A implementação é definida na F5.
 
@@ -395,16 +397,20 @@ StorageProvider
 
   Na confirmação, na mesma transação:
   1. trava o `files` (`FOR UPDATE`) e confere `pending`, dono (empresa) e validade;
-  2. `HEAD` confere o tamanho;
-  3. os primeiros 4 KB conferem os magic bytes;
-  4. a cota sobe por `UPDATE` atômico;
-  5. o arquivo vira `ready`, o documento ou a versão é criado e a auditoria é gravada.
+  2. `HEAD` da chave de envio confere o tamanho e guarda a `ETag`;
+  3. os primeiros 4 KB (`If-Match` com a `ETag`) conferem os magic bytes;
+  4. o objeto é **copiado** para a chave definitiva, só se a `ETag` ainda for a mesma;
+  5. a cota sobe por `UPDATE` atômico;
+  6. o arquivo vira `ready`, o documento ou a versão é criado e a auditoria é gravada.
 
-  Se reprovar: o objeto é apagado, `files.status = rejected` e a resposta é `422 FILE_REJECTED`.
+  Se reprovar: `files.status = rejected` e a resposta é `422 FILE_REJECTED`.
+- **Por que a cópia:** a URL de PUT continua válida por até 10 min depois do envio. Se o arquivo ficasse na chave que o navegador pode escrever, um segundo PUT trocaria o conteúdo já conferido. Com a cópia condicionada à `ETag`, o que fica guardado é exatamente o que passou nos magic bytes, e a chave definitiva nunca recebe URL de escrita.
+- **Limpeza da chave de envio:** nenhuma rota apaga objeto. O job apaga a chave de envio quando a URL de PUT já expirou (`upload_purged_at`) e remove linhas `pending` vencidas e `rejected` antigas.
 - **Provider local (dev) e memória (teste):** mesma interface. As "URLs assinadas" apontam para `/dev-storage/*` na própria API: um token HMAC carrega chave, validade, tamanho, tipo e disposição. Essas rotas só existem com `STORAGE_PROVIDER=local|memory`, e o boot falha em produção sem `r2`.
 - **Download:** `POST /documents/:id/download-url` devolve a URL. É `POST`, e não link direto, porque o access token vive em memória. A auditoria registra a versão baixada.
 - **Lixeira não devolve cota:** a cota só é devolvida na exclusão física (job da F10).
 - **CSP:** a origem S3 da conta R2 entra em `connect-src` e `img-src`, a partir da configuração do provider.
+- **`/dev-storage` (dev e teste):** como o arquivo sai da própria origem da API, a resposta leva CSP sem script (`script-src 'none'` no inline; `default-src 'none'; sandbox` no anexo). Em produção o arquivo vem do domínio do R2.
 
 ## 11. Documentos
 
@@ -434,6 +440,10 @@ StorageProvider
 - **Defaults da empresa nova:** pastas sugeridas, tipos e `company_settings` (com as pastas padrão) são criados no onboarding, na mesma transação, por `documents.service.createDefaults`. Empresas criadas antes da F3 ganham só a linha de `company_settings` (sem pastas), pela migration 0009.
 - **Auditoria:** título, descrição e nome de arquivo podem conter nomes de pessoas, então mudanças nesses campos registram só `[dado pessoal]`. Uploads registram extensão, tamanho e número da versão.
 - **Busca da lista:** `search_text` gerada (título + descrição, sem acento) com índice trigram, mais o nome das tags. A busca global (F8) amplia isso.
+- **Lixeira:** só quem tem `documents.manage` vê (`GET /trash`) e abre um documento da lixeira por id; para os demais, 404. Restaurar devolve à pasta de origem ou, se ela foi excluída, à raiz.
+- **Validade calculada:** cada documento sai com `expiry_status` (`expired`, `expiring` até 30 dias, `valid`), calculado no fuso da empresa. Nada disso é gravado.
+- **Tags na F3:** criadas ao marcar e listadas em `GET /tags` (autocompletar). Renomear e excluir tags fica para quando houver demanda (o mapa do §17.2 prevê o CRUD).
+- **Atalhos das pastas padrão:** `GET /company/context` devolve os ids de `company_settings` (`document_folders`), para a SPA abrir "Documentos da empresa" e, na F4, a pasta de comprovantes.
 
 ## 12. Financeiro e prestadores
 

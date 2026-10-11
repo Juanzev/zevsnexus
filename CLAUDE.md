@@ -12,7 +12,7 @@
 
 ## Estado atual
 
-- **F0 aprovada (09/10/2026) · F1 aprovada (10/10/2026) · F2 concluída, aguardando aprovação.**
+- **F0 aprovada (09/10/2026) · F1 aprovada (10/10/2026) · F2 aprovada (11/10/2026) · F3 concluída, aguardando aprovação.**
 - **Plano:** F1 Fundação + Auth → F2 Tenant/RBAC/Empresa/Plataforma → F3 Armazenamento + Documentos → F4 Prestadores + Financeiro → F5 PWA + piloto → F6 Planilhas → F7 Notas → F8 Busca + dashboard → F9 Importação → F10 Equipe/LGPD/hardening → F11 Painel ZEVS completo.
 
 ## Fonte das regras
@@ -189,4 +189,7 @@ Responder por escrito em `docs/SECURITY.md` antes do merge:
 - No Windows, o PostgreSQL iniciado por um console que depois fecha derruba os novos backends com `0xC0000142`/`0xC000013A`. O `db:local -- start` usa `Start-Process` com janela oculta (console próprio).
 - `migrate:down -- all` no banco de **desenvolvimento** apaga os dados (inclusive as contas de teste). Para provar a reversibilidade, o CI e o banco `_test` bastam.
 - No `<dialog>` da SPA, o menu "Mais" é sempre o primeiro do DOM: para achar um modal aberto, use `dialog[open]`.
-- Vulnerabilidade transitiva sem correção em ferramenta de desenvolvimento: registrar em `docs/SECURITY.md` (riscos aceitos). Se houver versão corrigida do pacote intermediário, usar `overrides` (ex.: `@parcel/watcher` do Tailwind).
+- **Arquivos:** o navegador só escreve na chave de envio (`…/uploads/<id>`); a confirmação copia para `…/files/<id>` condicionada à ETag conferida. Arquivo novo de um módulo entra por `filesService.verifyUpload` + `claimFile` na transação de quem usa o arquivo, nunca por um "confirmar" solto.
+- `STORAGE_PROVIDER`: `local` em dev (`.storage/`), `memory` nos testes e no E2E, `r2` obrigatório em produção. Nos testes, `tests/helpers/documents.js` faz intenção → PUT no `/dev-storage` → `POST /documents`.
+- No `<dialog>`, `showModal()` foca o primeiro botão (o "X"): o `openFormModal` foca o primeiro campo depois de abrir.
+- - Vulnerabilidade transitiva sem correção em ferramenta de desenvolvimento: registrar em `docs/SECURITY.md` (riscos aceitos). Se houver versão corrigida do pacote intermediário, usar `overrides` (ex.: `@parcel/watcher` do Tailwind).

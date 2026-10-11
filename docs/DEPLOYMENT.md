@@ -26,6 +26,7 @@ npm run build          # ou npm run watch:css durante o desenvolvimento
 
 - **Banco local:** `npm run db:local -- start | stop | status`.
 - **E-mails:** em desenvolvimento ficam em modo log e são gravados em `.outbox/` (um JSON por mensagem, com os links). Para enviar de verdade: `EMAIL_PROVIDER=resend` + `RESEND_API_KEY`.
+- **Arquivos:** em desenvolvimento ficam em disco, em `.storage/` (`STORAGE_PROVIDER=local`, fora do git); as "URLs assinadas" apontam para `/dev-storage/*` na própria API. Nos testes, `memory`. Para testar contra um bucket R2 de desenvolvimento: `STORAGE_PROVIDER=r2` + as variáveis `R2_*` (nunca o bucket de produção).
 
 > **Windows:** o script inicia o PostgreSQL destacado do terminal. Se o console que iniciou o servidor fechar, os novos processos do Postgres morrem com `0xC0000142`. Se isso acontecer: `npm run db:local -- stop` e depois `start`.
 
@@ -76,13 +77,39 @@ O blueprint está em [`render.yaml`](../render.yaml):
 4. **E-mail:** com `EMAIL_PROVIDER=log` (padrão do staging) **nenhum e-mail sai**, nem o de confirmação, e sem e-mail confirmado não dá para cadastrar empresa. Para testar o fluxo completo:
    - crie uma chave no Resend e troque `EMAIL_PROVIDER=resend` + `RESEND_API_KEY`;
    - sem domínio verificado, o Resend só entrega para o e-mail da sua conta (remetente `onboarding@resend.dev`).
-5. **Conferir:**
+5. **Arquivos (F3) — Cloudflare R2:** o staging sobe com `STORAGE_PROVIDER=r2` e o boot falha sem as 4 variáveis abaixo.
+   - No painel da Cloudflare, *R2 → Create bucket* `nexus-staging` (privado; sem domínio público).
+   - *R2 → Manage API tokens → Create API token*: permissão **Object Read & Write**, restrita ao bucket `nexus-staging`. Guarde o *Access Key ID* e o *Secret Access Key* (aparecem uma vez).
+   - Em *Settings → CORS policy* do bucket:
+
+     ```json
+     [
+       {
+         "AllowedOrigins": ["https://zevs-nexus-staging.onrender.com"],
+         "AllowedMethods": ["PUT", "GET"],
+         "AllowedHeaders": ["content-type"],
+         "MaxAgeSeconds": 3600
+       }
+     ]
+     ```
+
+   - No Render, preencha:
+
+     | Variável | Valor |
+     |---|---|
+     | `R2_ACCOUNT_ID` | ID da conta (32 caracteres hexadecimais, no painel do R2) |
+     | `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` | O token criado acima |
+     | `R2_BUCKET` | `nexus-staging` |
+
+   - Produção terá bucket e token próprios (`nexus-prod`); nunca reaproveite o token do staging.
+6. **Conferir:**
    - `https://…/health` → `{"status":"ok"}`;
    - `/ready` → `{"status":"ready"}`;
    - `/api/version` → o SHA do commit.
-6. **Primeiro uso:**
+7. **Primeiro uso:**
    - cadastre-se com o e-mail de `PLATFORM_ADMIN_EMAILS`, confirme e entre: você cai no Painel ZEVS;
-   - com outra conta, cadastre uma empresa e aprove pelo Painel.
+   - com outra conta, cadastre uma empresa e aprove pelo Painel;
+   - em *Documentos*, envie um PDF e abra: o envio vai direto ao R2 e o download usa URL de 60 s.
 
 > O plano free dorme sem tráfego (a primeira requisição demora) e os jobs param enquanto isso. É aceitável em staging. Produção vai para plano pago (Core, pág. 18).
 

@@ -117,3 +117,39 @@ A partir daqui toda rota de dados de empresa passa por `tenantRouter()`: `authen
 | Rotas de equipe (convites, papéis, grant/deny) usando a política de anti-escalada já testada | F10 |
 | Ligar as policies de RLS (todas as consultas de tenant já passam por `withTenant`) | F10 (D2) |
 | Staging com e-mail em modo log não envia o link de confirmação: para testar o cadastro completo lá, configurar o Resend | Staging |
+
+## Fase 3 — Armazenamento e Central de Documentos (11/10/2026)
+
+O arquivo nunca passa pela API: o navegador envia direto ao storage com URL assinada curta, e a API confere o que chegou antes de criar o documento (ARCHITECTURE §5.2 e §10.3).
+
+### Checklist por funcionalidade
+
+| Funcionalidade | Quem executa | Tenant | Permissão | Dados visíveis | IDOR | Race condition | Transação | Audit log | Informação sensível |
+|---|---|---|---|---|---|---|---|---|---|
+| **Intenção de envio** `POST /files/upload-intents` | Membro que gerencia documentos | `tenantRouter` + `withTenant` | `documents.manage` + limite de 200/h por usuário | O próprio arquivo pendente e a URL de PUT | Não há id de entrada; `company_id`, chave ou campos extras → 422. A chave é gerada no servidor (`companies/<empresa>/uploads/<uuid>`) e não sai na resposta | Pré-checagem de cota (a de verdade é atômica na confirmação) | Sim | — (o envio é auditado ao confirmar) | Tipo decidido pelo servidor pela allowlist; MIME de outro tipo → 422; `Content-Type` e `Content-Length` assinados na URL de PUT (10 min) |
+| **Confirmar envio** `POST /documents` e `POST /documents/:id/versions` | Quem enviou o arquivo | `file_id` só da mesma empresa **e** do mesmo usuário | `documents.manage` + `Idempotency-Key` | O documento criado | `file_id` de outra empresa ou de outra pessoa → 422 `FILE_NOT_FOUND`; pasta/tipo de outra empresa → 422 | **Sim**: conferência no storage fora da transação; depois `FOR UPDATE` no arquivo, status reconferido e cota por `UPDATE` atômico (4 confirmações simultâneas numa cota apertada → só as que cabem passam; o mesmo arquivo 3 vezes → 1 documento) | Sim: cota, `ready`, documento, versão, tags e auditoria | `document.uploaded` / `document.version_added` (extensão, tamanho, versão; sem título nem nome) e `file.rejected` | Magic bytes nos primeiros 4 KB; cópia para a chave definitiva **condicionada à ETag** conferida (um segundo PUT na URL ainda válida não troca o arquivo guardado — testado) |
+| **Listar e abrir** `GET /documents`, `/documents/:id`, `/history`, `/folders`, `/tags`, `/document-types` | Membro | `withTenant`; toda consulta filtra `company_id` | `documents.view` | Documentos ativos da empresa; lixeira só para quem gerencia | Documento de outra empresa → 404 (suíte A × B em todas as rotas por id) | Não | `withTenant` (leitura) | — | Busca com curingas escapados; ordenação só por allowlist; histórico sem valores pessoais |
+| **Baixar** `POST /documents/:id/download-url` | Membro | `withTenant` | `documents.view` + limite de 600/h por usuário | URL de GET de 60 s | Documento alheio → 404; na lixeira → 404 para quem não gerencia | Não | Sim | `document.downloaded` (versão e disposição), gravado **antes** de a URL sair | `inline` só para PDF e imagem; o resto sempre `attachment`; tipo e `Content-Disposition` forçados na URL; servido pelo domínio do R2, nunca pela origem do app |
+| **Editar, mover, arquivar, lixeira, restaurar, versões** | Quem gerencia documentos | `withTenant` | `documents.manage` | O documento | Mutação só depois de `SELECT … FOR UPDATE` com `company_id`; documento alheio → 404 e nada muda | **Sim**: edição com `version` (409 `VERSION_CONFLICT`); 5 versões simultâneas viram 2..6 sem buraco | Sim | `document.updated` (título, descrição e tags como `[dado pessoal]`), `document.moved`, `.archived`, `.unarchived`, `.deleted`, `.restored`, `.version_restored` | Restaurar versão cria versão nova (histórico nunca se reescreve); lixeira não devolve cota (exclusão física só pelo job da F10) |
+| **Favoritos** `PUT`/`DELETE /documents/:id/favorite` | Membro | `withTenant` | `documents.view` | Os favoritos do próprio membro | Documento alheio → 404 | `ON CONFLICT DO NOTHING` | — | — (preferência pessoal) | — |
+| **Pastas** `/folders` | Membro (ver) / gestor (criar, renomear, mover, excluir) | `withTenant` | `documents.view` / `documents.manage` | Árvore da empresa | Pasta alheia → 404; como pai ou destino → 422 | **Sim**: criar e mover sob trava por empresa (`pg_advisory_xact_lock`): dois movimentos cruzados nunca formam ciclo (testado); excluir trava a pasta e quem põe algo dentro usa `FOR SHARE` (pasta excluída nunca fica com documento ativo — testado) | Sim | `folder.created`, `.renamed` (sem o nome), `.moved`, `.deleted` | Até 8 níveis; nome sem `/` e `\`; único entre irmãs |
+| **Tipos de documento** `/document-types` | Gestor | `withTenant` | `documents.manage` (listar: `documents.view`) | Tipos da empresa | Tipo alheio → 404 (rota) ou 422 (referência) | Índice único entre ativos | Sim | `document_type.created`, `.renamed`, `.archived` | — |
+| **`/dev-storage/*`** (só `STORAGE_PROVIDER=local\|memory`) | Quem tem o token | O token carrega a chave gerada pelo servidor | Token HMAC (chave derivada do `JWT_SECRET` com rótulo próprio) | O objeto do token | Token de download não serve para envio; adulterado ou vencido → 403 | — | — | — | Não existe com `r2` (produção exige `r2` no boot); o token nunca vai para o log; respostas com CSP sem script |
+
+### Controles da fase
+
+- **Chaves:** `companies/<empresa>/files/<uuid>` (definitiva, só o servidor escreve) e `companies/<empresa>/uploads/<uuid>` (a única com URL de PUT). Formato validado em toda operação de provider; `CHECK` no banco.
+- **Três conferências do tipo:** extensão (allowlist), MIME declarado e magic bytes. Bloqueados: executáveis, scripts, HTML, SVG, arquivos com macro e compactados.
+- **Nenhuma rota apaga objeto:** arquivo recusado fica `rejected`; o job `cleanup.files` apaga envios vencidos (1 h de folga depois das 24 h), recusados com mais de um dia e a chave de envio dos confirmados depois que a URL de PUT expira.
+- **URLs assinadas fora do log:** a query string nunca é registrada e o caminho `/dev-storage/<op>/<token>` vira `[redacted]` (teste unitário).
+- **CSP:** a origem S3 da conta R2 entra em `connect-src` e `img-src` só com `STORAGE_PROVIDER=r2`.
+- **Frontend:** "Abrir" abre a aba no clique e corta o `opener` antes de navegar para a URL curta. Nenhuma URL assinada é guardada.
+
+### Pendências da F3 (para as próximas fases)
+
+| Item | Fase |
+|---|---|
+| Exclusão definitiva (lixeira com retenção) devolvendo a cota; conferir se o arquivo não é usado por outra versão antes de apagar o objeto | F10 |
+| Bucket e CORS do R2 de staging (passo a passo em `DEPLOYMENT.md`); provar o envio direto ao R2 de verdade | Staging |
+| Backup diário dos objetos para um segundo bucket (D12f) | F5 |
+| Varredura antivírus: fora do escopo (não prevista na ARCHITECTURE). Mitigação atual: allowlist + magic bytes + arquivos servidos por outro domínio, com `inline` só para PDF e imagem. Decisão do Juan se um cliente exigir | — |
