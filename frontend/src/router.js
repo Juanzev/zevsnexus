@@ -36,7 +36,7 @@ export async function navigate(to, { replace = false } = {}) {
 }
 
 function context() {
-  return { query: new URLSearchParams(window.location.search), navigate };
+  return { query: new URLSearchParams(window.location.search), params: currentRoute?.params ?? {}, navigate };
 }
 
 function showLoadError(outlet) {

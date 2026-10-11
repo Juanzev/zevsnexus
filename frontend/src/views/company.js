@@ -1,6 +1,7 @@
 // Empresa: dados cadastrais, endereço, contato e responsáveis. Edição só com company.manage
 // (o backend confere de novo). Edição concorrente → 409 com aviso para recarregar.
 import { companyStatusBadge, badge } from '../components/badge.js';
+import { documentList } from '../components/documents.js';
 import { ConfirmDialog } from '../components/confirm-dialog.js';
 import {
   bindSubmitShortcut,
@@ -22,7 +23,7 @@ import { html, setContent } from '../lib/html.js';
 import { icon } from '../lib/icons.js';
 import { UFS } from '../lib/timezones.js';
 import { api } from '../services/api.js';
-import { can, loadMe } from '../services/tenant.js';
+import { can, currentContext, loadMe } from '../services/tenant.js';
 
 const TAX_REGIMES = [
   { value: 'mei', label: 'MEI' },
@@ -170,6 +171,35 @@ function contactFields(contact = {}) {
     ${textareaField({ name: 'notes', label: 'Observações', value: contact.notes ?? '' })}`;
 }
 
+/** Atalho para a pasta "Empresa" (contrato social, CNPJ, alvarás) com os documentos mais recentes. */
+function companyDocumentsCard(folderId, documents) {
+  const href = folderId ? `/app/documentos/pasta/${folderId}` : '/app/documentos';
+  return html`<section class="card">
+    <div class="flex flex-wrap items-center justify-between gap-3">
+      <h2 class="text-base font-semibold text-slate-900">Documentos da empresa</h2>
+      <a href="${href}" class="btn btn-secondary btn-sm">${icon('folder-open', 'size-4')} Abrir pasta</a>
+    </div>
+    ${
+      documents.length === 0
+        ? html`<p class="mt-3 text-sm text-slate-600">Guarde aqui contrato social, cartão CNPJ, alvarás e certidões da empresa.</p>`
+        : html`<div class="mt-4">${documentList(documents, { actions: false })}</div>`
+    }
+  </section>`;
+}
+
+async function showCompanyDocuments(slot) {
+  const folderId = currentContext()?.document_folders?.company ?? null;
+  try {
+    const documents = folderId
+      ? (await api(`/documents?folder=${folderId}&sort=-updated_at&limit=5`)).data.documents
+      : [];
+    if (slot.isConnected) setContent(slot, companyDocumentsCard(folderId, documents));
+  } catch {
+    // Atalho complementar: sem ele a tela da empresa continua completa.
+    if (slot.isConnected) setContent(slot, companyDocumentsCard(folderId, []));
+  }
+}
+
 export default {
   title: 'Empresa',
 
@@ -285,9 +315,10 @@ export default {
         company = profile.data.company;
         contacts = list.data.contacts;
         setContent(root.querySelector('[data-status]'), companyStatusBadge(company.status));
-        setContent(content, html`<div data-profile></div><div data-contacts></div>`);
+        setContent(content, html`<div data-profile></div><div data-contacts></div><div data-company-documents></div>`);
         showProfile('view');
         showContacts();
+        if (can('documents.view')) showCompanyDocuments(content.querySelector('[data-company-documents]'));
       })
       .catch((err) => {
         if (content.isConnected) setContent(content, errorState({ message: err.message }));

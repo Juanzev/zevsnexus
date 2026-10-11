@@ -169,8 +169,9 @@
     @apply flex min-h-[50px] min-w-0 flex-1 cursor-pointer flex-col items-center justify-center gap-0.5 rounded-[22px] text-[11px] font-medium text-slate-600 aria-[current=page]:bg-primary/10 aria-[current=page]:text-primary;
   }
 
+  /* Letra levemente mais junta: "Documentos" e "Financeiro" cabem inteiros a 375 px. */
   .bottom-bar-item span {
-    @apply max-w-full truncate px-1;
+    @apply max-w-full truncate px-0.5 tracking-[-0.02em];
   }
 
   .sheet {

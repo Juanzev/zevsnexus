@@ -49,7 +49,10 @@ export function openFormModal({ title, body, submitLabel = 'Salvar', busyLabel =
     });
 
     document.body.append(dialog);
-    onMount?.(dialog);
     dialog.showModal();
+    // showModal() foca o primeiro botão (o "X"): Enter fecharia o modal. O foco vai para o primeiro
+    // campo, salvo se onMount escolher outro.
+    dialog.querySelector('input:not([type="hidden"]), select, textarea')?.focus();
+    onMount?.(dialog);
   });
 }

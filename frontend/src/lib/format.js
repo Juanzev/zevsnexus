@@ -25,6 +25,40 @@ export function formatDate(value) {
   return dateFormatter.format(new Date(value));
 }
 
+const dateTimeFormatter = new Intl.DateTimeFormat('pt-BR', {
+  day: '2-digit',
+  month: '2-digit',
+  year: 'numeric',
+  hour: '2-digit',
+  minute: '2-digit',
+});
+
+export function formatDateTime(value) {
+  if (!value) return '';
+  return dateTimeFormatter.format(new Date(value));
+}
+
+/** Data de calendário "AAAA-MM-DD" (vencimento, validade) → "DD/MM/AAAA", sem passar por fuso. */
+export function formatCalendarDate(value) {
+  const match = /^(\d{4})-(\d{2})-(\d{2})$/.exec(value ?? '');
+  return match ? `${match[3]}/${match[2]}/${match[1]}` : '';
+}
+
+/** Tamanho de arquivo legível (base 1024, como o limite do plano). */
+export function formatBytes(bytes) {
+  const value = Number(bytes);
+  if (!Number.isFinite(value) || value < 0) return '';
+  if (value < 1024) return `${value} B`;
+  const units = ['KB', 'MB', 'GB', 'TB'];
+  let size = value / 1024;
+  let unit = 0;
+  while (size >= 1024 && unit < units.length - 1) {
+    size /= 1024;
+    unit += 1;
+  }
+  return `${size.toLocaleString('pt-BR', { maximumFractionDigits: size < 10 ? 1 : 0 })} ${units[unit]}`;
+}
+
 /** Aplica a formatação ao sair do campo (evita o cursor pular enquanto a pessoa digita). */
 export function formatOnBlur(input, formatter) {
   input.addEventListener('blur', () => {

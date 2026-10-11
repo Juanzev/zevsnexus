@@ -7,8 +7,10 @@ import { can } from '../services/tenant.js';
 
 export const NAV_ITEMS = Object.freeze([
   { path: '/app', label: 'Início', icon: () => icon('house'), permission: 'dashboard.view' },
+  { path: '/app/documentos', label: 'Documentos', icon: () => icon('folder-open'), permission: 'documents.view' },
   { path: '/app/empresa', label: 'Empresa', icon: () => icon('building-2'), permission: 'company.view' },
-  { path: '/app/configuracoes', label: 'Configurações', icon: () => icon('settings') },
+  // `short`: rótulo da barra inferior, onde cabem ~10 caracteres a 375 px.
+  { path: '/app/configuracoes', label: 'Configurações', short: 'Ajustes', icon: () => icon('settings') },
 ]);
 
 const BOTTOM_BAR_SLOTS = 4;
@@ -37,7 +39,7 @@ export function bottomBar(items, pathname) {
     <nav aria-label="Atalhos" class="bottom-bar backdrop-blur-[18px] backdrop-saturate-[1.8]">
       ${shortcuts.map(
         (item) => html`<a href="${item.path}" class="bottom-bar-item" data-nav="${item.path}" ${isActive(item, pathname) ? html`aria-current="page"` : ''}>
-          ${item.icon()}<span>${item.label}</span></a>`,
+          ${item.icon()}<span>${item.short ?? item.label}</span></a>`,
       )}
       <button type="button" class="bottom-bar-item" data-action="more" aria-haspopup="dialog">
         ${icon('ellipsis')}<span>Mais</span></button>

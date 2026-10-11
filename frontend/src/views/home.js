@@ -1,5 +1,6 @@
-// Início (F2): o que falta para deixar a empresa pronta e o que vem a seguir.
-// O dashboard administrativo (pendências financeiras, notas, documentos) cresce a cada fase.
+// Início: o que falta para deixar a empresa pronta, documentos vencendo (D5.3) e o que vem a seguir.
+// O dashboard administrativo (pendências financeiras, notas) cresce a cada fase.
+import { documentList } from '../components/documents.js';
 import { errorState, loadingState } from '../components/states.js';
 import { toast } from '../components/toast.js';
 import { html, setContent } from '../lib/html.js';
@@ -65,11 +66,22 @@ function setupCard(steps) {
 }
 
 const UPCOMING = [
-  { title: 'Documentos', text: 'Pastas, versões e busca de todos os arquivos.', icon: () => icon('folder-open', 'size-5') },
   { title: 'Financeiro', text: 'Despesas, pagamentos, comprovantes e vencimentos.', icon: () => icon('wallet', 'size-5') },
   { title: 'Notas fiscais', text: 'Notas emitidas, anexos e recebimento.', icon: () => icon('receipt-text', 'size-5') },
   { title: 'Planilhas', text: 'Planilhas em uso, por ano e arquivadas.', icon: () => icon('sheet', 'size-5') },
 ];
+
+/** Alerta de validade: vencidos e vencendo nos próximos 30 dias (calculado no fuso da empresa). */
+function expiringCard(documents, total) {
+  return html`<section class="card">
+    <div class="flex flex-wrap items-center justify-between gap-2">
+      <h2 class="flex items-center gap-2 text-base font-semibold text-slate-900">
+        ${icon('calendar-clock', 'size-5 text-amber-600')} Documentos vencendo</h2>
+      <a href="/app/documentos?aba=vencendo" class="link text-sm">Ver ${total > documents.length ? `todos (${total})` : 'na Central'}</a>
+    </div>
+    <div class="mt-4">${documentList(documents, { actions: false })}</div>
+  </section>`;
+}
 
 function upcomingCard() {
   return html`<section class="card">
@@ -97,6 +109,7 @@ export default {
       <div class="mt-6 space-y-4">
         ${user.email_verified ? '' : verificationBanner()}
         <div data-setup>${can('company.view') ? loadingState('Conferindo o cadastro…') : ''}</div>
+        <div data-expiring></div>
         ${upcomingCard()}
       </div>`;
   },
@@ -116,6 +129,16 @@ export default {
         button.disabled = false;
       }
     });
+
+    const expiring = root.querySelector('[data-expiring]');
+    if (can('documents.view')) {
+      api('/documents?expiring=true&sort=expires_on&limit=5')
+        .then(({ data, meta }) => {
+          if (expiring.isConnected && data.documents.length > 0) setContent(expiring, expiringCard(data.documents, meta.total));
+        })
+        // O alerta é complementar: sem ele, o Início continua útil.
+        .catch(() => {});
+    }
 
     const setup = root.querySelector('[data-setup]');
     if (!can('company.view')) return;

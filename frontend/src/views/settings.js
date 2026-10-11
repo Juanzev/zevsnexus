@@ -1,10 +1,11 @@
-// Configurações: da empresa (fuso e cor da marca — settings.manage) e da própria conta
-// (troca de senha, sair de todos os dispositivos).
+// Configurações: da empresa (fuso e cor da marca — settings.manage), tipos de documento
+// (documents.manage) e da própria conta (troca de senha, sair de todos os dispositivos).
 import { ConfirmDialog } from '../components/confirm-dialog.js';
 import {
   bindPasswordToggles,
   bindSubmitShortcut,
   clearErrors,
+  field,
   formAlert,
   formValues,
   passwordField,
@@ -12,7 +13,8 @@ import {
   setBusy,
   showErrors,
 } from '../components/form.js';
-import { errorState, loadingState } from '../components/states.js';
+import { openFormModal } from '../components/modal.js';
+import { emptyState, errorState, loadingState } from '../components/states.js';
 import { toast } from '../components/toast.js';
 import { html, setContent } from '../lib/html.js';
 import { icon } from '../lib/icons.js';
@@ -117,6 +119,88 @@ function bindCompanyForm(root) {
   });
 }
 
+// ---------- tipos de documento ----------
+
+function typesList(types) {
+  if (types.length === 0) return emptyState({ title: 'Nenhum tipo cadastrado', message: 'Crie tipos para classificar os documentos.' });
+  return html`<ul class="divide-y divide-slate-100">
+    ${types.map(
+      (type) => html`<li class="flex items-center justify-between gap-3 py-2">
+        <span class="min-w-0"><span class="block truncate text-sm font-medium text-slate-900">${type.name}</span>
+          <span class="block text-xs text-slate-500">${type.document_count === 1 ? '1 documento' : `${type.document_count} documentos`}</span></span>
+        <span class="flex shrink-0 gap-1">
+          <button type="button" class="btn btn-ghost btn-sm" data-action="rename-type" data-id="${type.id}" aria-label="Renomear ${type.name}">${icon('pencil', 'size-4')}</button>
+          <button type="button" class="btn btn-ghost btn-sm" data-action="archive-type" data-id="${type.id}" aria-label="Arquivar ${type.name}">${icon('archive', 'size-4')}</button>
+        </span>
+      </li>`,
+    )}
+  </ul>`;
+}
+
+function mountDocumentTypes(slot) {
+  async function load() {
+    try {
+      const { data } = await api('/document-types');
+      if (!slot.isConnected) return;
+      setContent(slot, typesList(data.document_types));
+      bind(data.document_types);
+    } catch (err) {
+      if (slot.isConnected) setContent(slot, errorState({ message: err.message }));
+    }
+  }
+
+  function bind(types) {
+    for (const button of slot.querySelectorAll('[data-action="rename-type"]')) {
+      button.addEventListener('click', async () => {
+        const type = types.find((item) => item.id === button.dataset.id);
+        const saved = await openFormModal({
+          title: 'Renomear tipo',
+          body: field({ name: 'name', label: 'Nome', value: type.name }),
+          onSubmit: (form) => api(`/document-types/${type.id}`, { method: 'PATCH', body: { name: form.elements.name.value } }),
+        });
+        if (saved) {
+          toast('Tipo renomeado.', { type: 'success' });
+          load();
+        }
+      });
+    }
+    for (const button of slot.querySelectorAll('[data-action="archive-type"]')) {
+      button.addEventListener('click', async () => {
+        const type = types.find((item) => item.id === button.dataset.id);
+        const confirmed = await ConfirmDialog.ask({
+          title: `Arquivar o tipo “${type.name}”?`,
+          message: 'Ele deixa de aparecer para novos documentos. Os documentos que já usam o tipo continuam com ele.',
+          confirmLabel: 'Arquivar',
+          danger: false,
+        });
+        if (!confirmed) return;
+        try {
+          await api(`/document-types/${type.id}/archive`, { method: 'POST', body: {} });
+          toast('Tipo arquivado.', { type: 'success' });
+          load();
+        } catch (err) {
+          toast(err.message, { type: 'error' });
+        }
+      });
+    }
+  }
+
+  slot.closest('section').querySelector('[data-action="add-type"]').addEventListener('click', async () => {
+    const saved = await openFormModal({
+      title: 'Novo tipo de documento',
+      body: field({ name: 'name', label: 'Nome', hint: 'Ex.: Alvará, Certidão negativa, Contrato de obra.' }),
+      submitLabel: 'Criar',
+      onSubmit: (form) => api('/document-types', { method: 'POST', body: { name: form.elements.name.value } }),
+    });
+    if (saved) {
+      toast('Tipo criado.', { type: 'success' });
+      load();
+    }
+  });
+
+  load();
+}
+
 function bindAccount(root, navigate) {
   const form = root.querySelector('[data-form="password"]');
   bindPasswordToggles(form);
@@ -179,11 +263,25 @@ export default {
               <div class="mt-4" data-company-settings>${loadingState()}</div></section>`
           : ''
       }
+      ${
+        can('documents.manage')
+          ? html`<section class="card">
+              <div class="flex flex-wrap items-center justify-between gap-3">
+                <h2 class="text-base font-semibold text-slate-900">Tipos de documento</h2>
+                <button type="button" class="btn btn-secondary btn-sm" data-action="add-type">${icon('plus', 'size-4')} Novo tipo</button>
+              </div>
+              <p class="mt-1 text-sm text-slate-600">A classificação usada na Central de Documentos.</p>
+              <div class="mt-3" data-document-types>${loadingState()}</div>
+            </section>`
+          : ''
+      }
       ${accountSection(getUser())}
     </div>`,
 
   mount(root, { navigate }) {
     bindAccount(root, navigate);
+    const typesSlot = root.querySelector('[data-document-types]');
+    if (typesSlot) mountDocumentTypes(typesSlot);
     const slot = root.querySelector('[data-company-settings]');
     if (!slot) return;
     api('/company/settings')
