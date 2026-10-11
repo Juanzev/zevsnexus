@@ -16,6 +16,8 @@ As decisões D1–D13 foram aprovadas conforme as recomendações. Nas perguntas
 | D7.2 · "Finalizada" | Emitida **e** paga (calculada). Pode ser revista na F7 com o cliente |
 | D12 a–f | Adotados; g não adotado |
 | D11 · Tags em despesas | Adotadas (11/10/2026, início da F4): mesmas tags da empresa, filtro e total por tag |
+| D12f · Backup dos arquivos | GitHub Action diária com `rclone copy` para um bucket de backup (11/10/2026, início da F5) |
+| D13.2 · Domínio | Ainda não definido (11/10/2026): tudo parametrizado por `APP_URL`; produção pode começar em `*.onrender.com` |
 
 Pendentes de informação do cliente, decididos na fase em que entram:
 
@@ -23,7 +25,7 @@ Pendentes de informação do cliente, decididos na fase em que entram:
 |---|---|
 | D6.4 · Planilhas reais | F6 |
 | D7.3 / D7.4 · Notas recebidas e tipos emitidos | F7 |
-| D13.2 · Domínio | F5 |
+| D13.2 · Domínio | Antes do piloto (decisão do Juan) |
 
 Este documento é o resultado da Fase 0 (§39 do prompt oficial). O que precisa do seu ok está na **§6 (D1–D13)**. O detalhamento técnico está em [`docs/ARCHITECTURE.md`](ARCHITECTURE.md) e as regras de trabalho do Claude estão em [`CLAUDE.md`](../CLAUDE.md). Os dois são rascunhos e passam a valer como fonte da verdade depois da aprovação.
 

@@ -653,6 +653,19 @@ O detalhe de cada contrato vai para `docs/API.md` na fase correspondente.
 - **Câmera:** `<input type="file" accept="image/*,application/pdf" capture="environment">` para comprovantes.
 - **Teste obrigatório:** aparelho novo + "Adicionar à Tela de Início" abrindo em `/app`.
 
+### 19.1 Como fica na implementação (F5)
+
+- **Arquivos:** `frontend/public/manifest.webmanifest`, `sw.js`, `offline.html` e `icons/` (PNG 192, 512, maskable 512 e `apple-touch-icon` 180, gerados por `frontend/scripts/render-icons.mjs` a partir do `favicon.svg` e versionados).
+- **Service worker (`sw.js`):**
+  - navegação: rede primeiro; sem rede, a página "Sem conexão" (pré-guardada na instalação);
+  - estáticos da própria origem (`/assets`, `/src`, ícones, manifest): rede primeiro, cache só como reserva;
+  - **nunca** passa pelo cache: `/api/*`, `/dev-storage/*`, `/sw.js`, qualquer método que não seja `GET` e qualquer origem de fora (as URLs do R2);
+  - `skipWaiting` + `clients.claim`; ao ativar, apaga caches de versões anteriores.
+- **Registro:** direto no boot (não no evento `load`), com `updateViaCache: 'none'`. O banner "Atualizar" também pede `registration.update()` antes de recarregar.
+- **Kill switch:** com `SW_KILL_SWITCH=true`, o backend serve em `/sw.js` um service worker que apaga todos os caches, se desregistra e recarrega as abas. Ligar e desligar é só a variável de ambiente (o roteiro está em `docs/PRODUCTION.md`).
+- **Câmera:** os campos de comprovante e anexo têm "Tirar foto" (`accept="image/*"` + `capture="environment"`) ao lado de "Escolher arquivo".
+- **"Instalar no celular":** ajuda em Configurações (Android, iPhone e computador), que mostra quando o app já está instalado. Sem banner de instalação nem `beforeinstallprompt` (Experimental, D9).
+
 ## 20. Segurança
 
 ### 20.1 Base
@@ -790,6 +803,17 @@ Nenhum fluxo crítico depende de job: "vencida" é calculada na consulta.
   - **RPO 24 h / RTO 8 h** (proposta, D12b).
 - **Graceful shutdown:** no `SIGTERM`, para de aceitar conexões, termina as em curso e fecha jobs e pool.
 - **Rollback:** redeploy do commit anterior; o banco nunca roda `down` automático em produção.
+
+### 24.1 Como fica na implementação (F5)
+
+- **Produção** em `render.production.yaml` (blueprint próprio): web service pago (Starter), Postgres pago, região Virginia, `preDeployCommand` com migrations + seed, `JOBS_ENABLED=true`, `STORAGE_PROVIDER=r2`, `EMAIL_PROVIDER=resend`. O staging continua em `render.yaml`.
+- **Domínio (D13.2):** ainda não definido. Tudo é parametrizado por `APP_URL`; até o domínio existir, produção usa a URL `*.onrender.com`. O roteiro do Cloudflare e do Resend fica pronto para quando houver domínio.
+- **Backup do banco:** `.github/workflows/db-backup.yml`, diário às 02h de Manaus (06h UTC) e com botão manual: `pg_dump -Fc` → artefato privado com retenção de 30 dias. Usa o segredo `PROD_DATABASE_URL` do GitHub.
+- **Backup dos arquivos (D12f, decidido na F5):** `.github/workflows/files-backup.yml`, diário e com botão manual: `rclone copy` do bucket de produção para um bucket de backup, só `companies/*/files/**` (as chaves de envio temporárias ficam de fora), com `--immutable` (chave nunca é reescrita). É cópia, não sincronização: apagar em produção não apaga o backup. Tokens próprios nos segredos do GitHub (leitura no bucket de produção, escrita no de backup).
+- **Restore testado:** `npm run db:restore-check -- <arquivo.dump>` cria um banco temporário no cluster local, restaura, confere que não há migration pendente e que a API responde `/ready`, e mostra as contagens das tabelas principais. O resultado vai para a tabela de `docs/PRODUCTION.md` (data, responsável, origem do dump, resultado). Antes do piloto e a cada trimestre.
+- **Ensaio de produção local:** `npm run prod:rehearsal` — banco novo, migrations e seed duas vezes (a segunda não faz nada), app com `NODE_ENV=production` e um fluxo ponta a ponta pela API (cadastro, aprovação, empresa, prestador, despesa, pagamento, estorno, dashboard).
+- **Observabilidade:** uptime externo em `/health` da **origem** (`*.onrender.com`); logs do Render; eventos de segurança já existentes.
+- `FRONTEND_URL` e `ENCRYPTION_KEY` (da base ZEVS) não se aplicam: a SPA é servida na mesma origem e não há campo cifrado no banco.
 
 ## 25. Decisões
 

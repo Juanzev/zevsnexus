@@ -14,8 +14,8 @@ O primeiro cliente é uma empresa de engenharia civil, mas nenhum comportamento 
 | 1 | Fundação + autenticação + base da SPA (telas de acesso) | ✅ Aprovada (10/10/2026) |
 | 2 | Tenant, RBAC, Empresa, onboarding, Painel ZEVS mínimo, staging | ✅ Aprovada (11/10/2026) |
 | 3 | Armazenamento (R2) + Central de Documentos | ✅ Aprovada (11/10/2026) |
-| 4 | Prestadores + Financeiro | ✅ Concluída — aguardando aprovação |
-| 5 | PWA + mobile + produção paga → **piloto** | ⏳ |
+| 4 | Prestadores + Financeiro | ✅ Aprovada (11/10/2026) |
+| 5 | PWA + mobile + produção paga → **piloto** | 🚧 Em andamento |
 | 6 | Planilhas (níveis 1 e 2) | ⏳ |
 | 7 | Notas fiscais | ⏳ |
 | 8 | Busca global + dashboard completo → **MVP completo** | ⏳ |
