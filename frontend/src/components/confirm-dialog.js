@@ -18,10 +18,22 @@ export const ConfirmDialog = {
           </div>
         </form>`,
       );
-      dialog.addEventListener('close', () => {
-        resolve(dialog.returnValue === 'confirm');
+      let finished = false;
+      // Uma resposta só; não depende apenas do evento `close` (atrasado com a aba em segundo plano).
+      const finish = (confirmed) => {
+        if (finished) return;
+        finished = true;
+        if (dialog.open) dialog.close();
         dialog.remove();
-      });
+        resolve(confirmed);
+      };
+      for (const button of dialog.querySelectorAll('button[value]')) {
+        button.addEventListener('click', (event) => {
+          event.preventDefault();
+          finish(button.value === 'confirm');
+        });
+      }
+      dialog.addEventListener('close', () => finish(dialog.returnValue === 'confirm'));
       document.body.append(dialog);
       dialog.showModal();
     });

@@ -26,10 +26,20 @@ export function openFormModal({ title, body, submitLabel = 'Salvar', busyLabel =
     );
 
     let result = null;
+    let finished = false;
     const form = dialog.querySelector('form');
+    // Fecha e entrega o resultado uma vez só. Não depende só do evento `close`: com a aba sem desenhar
+    // (em segundo plano), o navegador pode atrasar esse evento e a tela ficaria esperando.
+    function finish() {
+      if (finished) return;
+      finished = true;
+      if (dialog.open) dialog.close();
+      dialog.remove();
+      resolve(result);
+    }
     bindSubmitShortcut(form);
     for (const button of dialog.querySelectorAll('[data-action="close"]')) {
-      button.addEventListener('click', () => dialog.close());
+      button.addEventListener('click', finish);
     }
     form.addEventListener('submit', async (event) => {
       event.preventDefault();
@@ -37,16 +47,14 @@ export function openFormModal({ title, body, submitLabel = 'Salvar', busyLabel =
       const done = setBusy(form.querySelector('[type="submit"]'), busyLabel);
       try {
         result = await onSubmit(form);
-        dialog.close();
+        finish();
       } catch (err) {
         showErrors(form, err);
         done();
       }
     });
-    dialog.addEventListener('close', () => {
-      dialog.remove();
-      resolve(result);
-    });
+    // Esc (cancel) e qualquer outro fechamento.
+    dialog.addEventListener('close', finish);
 
     document.body.append(dialog);
     dialog.showModal();
