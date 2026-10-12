@@ -1,7 +1,7 @@
 // Layout do painel: sidebar no desktop, cabeçalho + barra inferior no celular (pág. 10).
 // Montado uma vez por empresa; a cada navegação só o item ativo muda (update).
 import { brandMark } from '../components/brand.js';
-import { bottomBar, markActive, sidebarNav, visibleNavItems } from '../components/nav.js';
+import { bottomBar, markActive, sidebarNav, splitNavItems, visibleNavItems } from '../components/nav.js';
 import { toast } from '../components/toast.js';
 import { html, setContent } from '../lib/html.js';
 import { icon } from '../lib/icons.js';
@@ -40,6 +40,7 @@ export function mountAppLayout(root, { navigate }) {
   const list = companies();
   const current = currentCompany();
   const items = visibleNavItems();
+  const { shortcuts, more } = splitNavItems(items);
   const pathname = window.location.pathname;
   const admin = isPlatformAdmin();
 
@@ -65,8 +66,8 @@ export function mountAppLayout(root, { navigate }) {
         </header>
         <main id="conteudo" class="app-main" data-outlet></main>
       </div>
-      ${bottomBar(items, pathname)}
-      ${moreSheet(items.slice(4), { admin, list, current })}
+      ${bottomBar(shortcuts, pathname)}
+      ${moreSheet(more, { admin, list, current })}
     </div>`,
   );
 

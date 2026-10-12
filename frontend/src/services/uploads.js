@@ -23,6 +23,24 @@ export const ACCEPTED_EXTENSIONS = Object.freeze([
 ]);
 export const ACCEPT_ATTRIBUTE = ACCEPTED_EXTENSIONS.map((extension) => `.${extension}`).join(',');
 
+export const SPREADSHEET_EXTENSIONS = Object.freeze(['xlsx', 'xls', 'csv', 'ods']);
+export const SPREADSHEET_ACCEPT = SPREADSHEET_EXTENSIONS.map((extension) => `.${extension}`).join(',');
+
+function extensionOf(file) {
+  const match = /\.([A-Za-z0-9]{1,8})$/.exec(file.name);
+  return match ? match[1].toLowerCase() : '';
+}
+
+/**
+ * Ano de referência sugerido para planilha: o da última modificação do arquivo (uma planilha de 2019
+ * enviada hoje continua sendo de 2019). Fora do intervalo aceito, o backend usa o ano corrente.
+ */
+export function referenceYearOf(file) {
+  if (!SPREADSHEET_EXTENSIONS.includes(extensionOf(file)) || !file.lastModified) return undefined;
+  const year = new Date(file.lastModified).getFullYear();
+  return year >= 1990 && year <= 2100 ? year : undefined;
+}
+
 /** PUT com progresso (fetch não informa progresso de envio). */
 function putFile({ url, method, headers }, file, onProgress) {
   return new Promise((resolve, reject) => {
@@ -61,7 +79,7 @@ export async function uploadDocument(file, { folderId = null, onProgress } = {})
   const fileId = await sendToStorage(file, onProgress);
   const { data } = await api('/documents', {
     method: 'POST',
-    body: { file_id: fileId, folder_id: folderId },
+    body: { file_id: fileId, folder_id: folderId, reference_year: referenceYearOf(file) },
     idempotencyKey: newIdempotencyKey(),
   });
   return data.document;
@@ -72,7 +90,7 @@ export async function uploadVersion(documentId, file, { comment = null, onProgre
   const fileId = await sendToStorage(file, onProgress);
   const { data } = await api(`/documents/${documentId}/versions`, {
     method: 'POST',
-    body: { file_id: fileId, comment },
+    body: { file_id: fileId, comment, reference_year: referenceYearOf(file) },
     idempotencyKey: newIdempotencyKey(),
   });
   return data.document;
@@ -80,8 +98,11 @@ export async function uploadVersion(documentId, file, { comment = null, onProgre
 
 /** Extensão aceita? (aviso imediato; a regra de verdade é do backend). */
 export function isAcceptedFile(file) {
-  const match = /\.([A-Za-z0-9]{1,8})$/.exec(file.name);
-  return Boolean(match && ACCEPTED_EXTENSIONS.includes(match[1].toLowerCase()));
+  return ACCEPTED_EXTENSIONS.includes(extensionOf(file));
+}
+
+export function isSpreadsheetFile(file) {
+  return SPREADSHEET_EXTENSIONS.includes(extensionOf(file));
 }
 
 /**
