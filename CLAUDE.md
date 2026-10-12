@@ -12,7 +12,7 @@
 
 ## Estado atual
 
-- **F0 aprovada (09/10/2026) · F1 aprovada (10/10/2026) · F2 aprovada (11/10/2026) · F3 aprovada (11/10/2026) · F4 aprovada (11/10/2026) · F5 aprovada (11/10/2026; go-live depende do Juan: `docs/PRODUCTION.md`) · F6 em andamento.**
+- **F0 aprovada (09/10/2026) · F1 aprovada (10/10/2026) · F2 aprovada (11/10/2026) · F3 aprovada (11/10/2026) · F4 aprovada (11/10/2026) · F5 aprovada (11/10/2026; go-live depende do Juan: `docs/PRODUCTION.md`) · F6 concluída (11/10/2026), aguardando aprovação.**
 - **Plano:** F1 Fundação + Auth → F2 Tenant/RBAC/Empresa/Plataforma → F3 Armazenamento + Documentos → F4 Prestadores + Financeiro → F5 PWA + piloto → F6 Planilhas → F7 Notas → F8 Busca + dashboard → F9 Importação → F10 Equipe/LGPD/hardening → F11 Painel ZEVS completo.
 
 ## Fonte das regras
@@ -194,9 +194,13 @@ Responder por escrito em `docs/SECURITY.md` antes do merge:
 - **Arquivos:** o navegador só escreve na chave de envio (`…/uploads/<id>`); a confirmação copia para `…/files/<id>` condicionada à ETag conferida. Arquivo novo de um módulo entra por `filesService.verifyUpload` + `claimFile` na transação de quem usa o arquivo, nunca por um "confirmar" solto.
 - `STORAGE_PROVIDER`: `local` em dev (`.storage/`), `memory` nos testes e no E2E, `r2` obrigatório em produção. Nos testes, `tests/helpers/documents.js` faz intenção → PUT no `/dev-storage` → `POST /documents`.
 - No `<dialog>`, `showModal()` foca o primeiro botão (o "X"): o `openFormModal` foca o primeiro campo depois de abrir.
-- - **Financeiro:** `paid_amount_cents` só muda em `expensesRepository.settle`; o status só sai da expressão única do repository. Pagamento novo de outro módulo (ex.: importação na F9) passa por `expenses.service`, nunca por `INSERT` direto.
+- **Financeiro:** `paid_amount_cents` só muda em `expensesRepository.settle`; o status só sai da expressão única do repository. Pagamento novo de outro módulo (ex.: importação na F9) passa por `expenses.service`, nunca por `INSERT` direto.
 - **Espaço inseparável** (formatação de moeda, recuo de `<option>`): escreva `String.fromCharCode(0xa0)` ou `\s` na regex. O caractere literal é invisível e o ESLint recusa (`no-irregular-whitespace`).
 - **`<dialog>` com a aba em segundo plano:** o navegador pode atrasar o evento `close`. Os modais entregam o resultado no próprio clique/envio; não volte a depender só do `close`.
 - **Service worker:** rede primeiro, sempre; nada de `/api`, `/dev-storage` ou URL do R2 no cache. Mudou o `sw.js`? Rode `tests/pwa.spec.js`. Emergência: `SW_KILL_SWITCH=true` (ver `docs/PRODUCTION.md`).
-- **Scripts de edição:** Python com `"\1"` dentro de texto vira o caractere de controle `\x01`; use string crua (`r'''...'''`) ou edite pelo editor.
-- - Vulnerabilidade transitiva sem correção em ferramenta de desenvolvimento: registrar em `docs/SECURITY.md` (riscos aceitos). Se houver versão corrigida do pacote intermediário, usar `overrides` (ex.: `@parcel/watcher` do Tailwind).
+- **Scripts de edição:** Python com `"\1"` ou `'\\n'` dentro de texto vira caractere de controle ou quebra de linha de verdade (e `\u` incompleto nem compila); use string crua (`r'''...'''`) ou edite pelo editor. Escapes `\uXXXX` escritos em arquivo também podem virar o caractere literal (BOM, NBSP): no código, use `String.fromCharCode(0xfeff)`.
+- **Antes de sobrescrever um arquivo, leia-o.** Na F6 o `.gitattributes` foi sobrescrito sem leitura e as regras antigas tiveram de ser restauradas no commit seguinte.
+- **Planilhas:** a ficha (`spreadsheets`) nasce em `documents.service` (`registerSpreadsheet`), no envio e na nova versão; não crie planilha por outro caminho. A prévia passa sempre por `readers/index.js` (`readSpreadsheet`), com os tetos de `readers/limits.js`; leitor novo usa `openZip`/`parseXml` (zip com teto, XML sem `DOCTYPE`) e devolve só texto.
+- **Planilhas fantasma** (`fixtures/planilhas/`, geradas pelo Excel via COM): use `NumberFormatLocal` (o `NumberFormat` em inglês gera CSV local errado) e crie abas com `SheetsInNewWorkbook` (`Worksheets.Add` com `Missing` falha). O git não preserva a data de modificação: teste que dependa de `File.lastModified` monta o arquivo em memória.
+- **Testes do frontend (node:test):** módulo que importa `services/session.js` abre um `BroadcastChannel` e o Node não termina; no teste, apague `globalThis.BroadcastChannel` antes de importar (`await import(...)`).
+- Vulnerabilidade transitiva sem correção em ferramenta de desenvolvimento: registrar em `docs/SECURITY.md` (riscos aceitos). Se houver versão corrigida do pacote intermediário, usar `overrides` (ex.: `@parcel/watcher` do Tailwind).

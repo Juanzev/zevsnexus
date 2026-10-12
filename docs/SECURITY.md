@@ -216,3 +216,32 @@ Dinheiro em centavos `bigint` do banco à tela (a tela lê o texto digitado sem 
 | Render pago, R2 de produção, segredos e workflows de backup | Juan (`docs/PRODUCTION.md`) |
 | **Restore de um backup de produção** registrado na tabela | Juan, antes do piloto |
 | Teste em aparelho real (Android e iPhone) | Juan (`docs/PRODUCTION.md` §9) |
+
+## Fase 6 — Planilhas, níveis 1 e 2 (11/10/2026)
+
+Planilha é arquivo de terceiro e, portanto, suspeita: a prévia é **somente leitura**, em texto, com teto para tudo. Fórmula nunca é avaliada (vale o último valor salvo no arquivo), e macro, link externo e conexão de dados são ignorados.
+
+### Checklist por funcionalidade
+
+| Funcionalidade | Quem executa | Tenant | Permissão | Dados visíveis | IDOR | Race condition | Transação | Audit log | Informação sensível |
+|---|---|---|---|---|---|---|---|---|---|
+| **Registro automático** (envio e nova versão de `.xlsx/.xls/.csv/.ods`) | Quem envia documento | `withTenant` (mesma transação do documento) | `documents.manage` (a rota do documento) | — | O documento é criado no tenant do contexto; `reference_year` é só um número validado (1990–2100) | `ON CONFLICT DO NOTHING` (uma linha por documento) | Sim | `spreadsheet.registered` (extensão e ano) | Nenhuma: o ano vem da data de modificação do arquivo, no navegador |
+| **Lista e visões** `GET /spreadsheets` | Membro | `tenantRouter` + `withTenant` | `spreadsheets.view` | Planilhas da empresa fora da lixeira; anos existentes | — (sem id); a lista de anos também é da empresa (teste A × B) | Não | Leitura | — | Busca com curingas escapados; visão e ordenação por allowlist (`z.enum`) |
+| **Detalhe e metadados** `GET/PATCH /spreadsheets/:id` | Membro (ver) / quem organiza (alterar) | `withTenant` | `spreadsheets.view` / `spreadsheets.manage` | Metadados e o arquivo atual | Planilha alheia ou na lixeira → 404 e nada muda | `SELECT … FOR UPDATE OF s`; PATCHs simultâneos de campos diferentes não se sobrescrevem (`COALESCE`, testado) | Sim | `spreadsheet.updated` com o que mudou (em uso, ano) — só quando muda | — |
+| **Ações em lote** `POST /spreadsheets/bulk` | Quem organiza | `withTenant` | `spreadsheets.manage` | `{ updated, not_found }` | Id de outra empresa (ou na lixeira) volta em `not_found` e nada dele muda (teste A × B) | Travamento item a item **em ordem fixa (por id)**: 8 lotes simultâneos em ordens opostas, sem deadlock (testado) | Sim, o lote inteiro | Um evento por item (`spreadsheet.updated`, `document.archived`/`unarchived`) | Até 100 ids, deduplicados |
+| **Prévia** `GET /spreadsheets/:id/preview` | Membro | `withTenant` para conferir; leitura do arquivo **fora** da transação | `spreadsheets.view` + limite por pessoa (600/h) | Texto das células da página pedida (50 linhas), nomes das abas | Planilha alheia → 404, sem baixar o arquivo e sem auditoria em nenhuma empresa (testado) | Não altera nada | Só a auditoria da abertura | `document.previewed` só na abertura (1ª página sem aba escolhida), não a cada página | **Arquivo hostil:** tamanho conferido no banco antes de baixar (10 MB) e de novo no storage; zip com teto por parte (50 MB) e no total (100 MB) cortado pelo próprio zlib (`maxOutputLength`); zip64 e criptografia recusados; XML com `DOCTYPE` recusado (sem XXE nem billion laughs); 100 abas, 100 mil linhas, 200 colunas, 1.000 caracteres por célula, 500 mil textos compartilhados e 5 s de leitura. Estourou → 422 com a orientação de baixar; nunca derruba o processo |
+| **Telas** `/app/planilhas` e `/app/planilhas/:id` | Navegador | O backend decide | Guardas só escondem (`spreadsheets.view`; seleção e lote só com `spreadsheets.manage`; envio só com `documents.manage`) | O que a API devolve | — | — | — | — | Célula exibida **só** por `html```: fórmula, `<script>` e HTML aparecem como texto (teste unitário do frontend); a tabela rola só no próprio contêiner |
+
+### Controles da fase
+
+- **Leitor próprio** (decisão da F6, registrada na FASE-0): zip pelo `zlib` do Node e XML pelo `saxes` (sem dependências, sem resolução de entidade). O `.xls` legado **não** é lido no servidor (a biblioteca que o lê tem CVEs sem correção): só armazenamento e download.
+- **Planilhas hostis nos testes** (`tests/unit/spreadsheet-readers.test.js`): zip bomb declarado e disfarçado (declara 100 bytes, descompacta 50 MB), XXE, arquivo que não é zip, ODS de outro tipo, XLSX esparso (linha 900.000, coluna ZZ) e ODS com 1 milhão de linhas repetidas — todos respondem em menos de 2 s, com o erro certo.
+- **Isolamento e permissões:** `tests/security/isolation-spreadsheets.test.js` e `permissions-spreadsheets.test.js` (5 papéis); concorrência em `tests/concurrency/spreadsheets.test.js`.
+- **Dependência nova de produção:** `saxes` 6 (sem dependências próprias além de `xmlchars`); `npm audit --omit=dev`: 0 vulnerabilidades.
+
+### Pendências da F6
+
+| Item | Fase |
+|---|---|
+| Visão "Importadas" e importação de linhas para o Financeiro (`spreadsheets.import` + `finance.manage`, feature `spreadsheet_import`) | F9 |
+| Prévia de `.xls` legado (só se surgir leitor sem CVE) | — |

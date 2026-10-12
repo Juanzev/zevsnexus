@@ -24,6 +24,7 @@ PostgreSQL 16+ (CI em 17, local em 18), `pg` sem ORM e migrations com node-pg-mi
 | `0009_documents` | `files`, `folders`, `document_types`, `documents`, `document_versions`, `tags`, `document_tags`, `document_favorites`, `company_settings` (com linha criada para as empresas existentes) |
 | `0010_parties` | `parties`, `party_documents`; `company_settings.parties_folder_id` |
 | `0011_finance` | `finance_categories` (com as sugeridas para empresas existentes), `expenses`, `expense_payments` (trigger append-only), `expense_documents`, `expense_tags`; `company_settings.upcoming_window_days` |
+| `0012_spreadsheets` | `spreadsheets` (extensão 1:1 de `documents`: em uso e ano de referência), com a ficha criada para as planilhas já enviadas |
 
 **Seed do catálogo** (`npm run seed`, idempotente, roda em todo deploy): permissões, papéis com a matriz D10, features e planos, a partir de `src/modules/rbac/rbac.catalog.js` e `src/modules/plans/plans.catalog.js`. Nunca apaga permissão nem feature; sincroniza papel × permissão e plano × feature.
 
@@ -119,3 +120,8 @@ O cluster usa o provider de collation `builtin` (`C.UTF-8`, PostgreSQL 17+): `lo
 - **`expense_payments`** — `amount_cents > 0`, `method` na lista, `paid_on date`; estorno em `voided_at`/`voided_by`/`void_reason` (todos ou nenhum). Trigger `expense_payments_guard`: sem `DELETE`, sem edição, estorno uma vez; `TRUNCATE` bloqueado. `UNIQUE (company_id, expense_id, id)` para o vínculo do comprovante.
 - **`expense_documents`** — vínculo despesa × documento com `role` e, no comprovante, `payment_id` (FK composta que garante pagamento da mesma despesa).
 - **`expense_tags`** — tags da empresa em despesas (D11).
+
+## Tabelas da F6 (destaques)
+
+- **`spreadsheets`** — extensão 1:1 de `documents` (ARCHITECTURE §13.1.1): PK `(company_id, document_id)` e FK composta para `documents (company_id, id)` com `ON DELETE CASCADE` (a planilha nunca sobrevive ao documento). `in_use boolean`, `reference_year smallint` com `CHECK` 1990–2100, `updated_by`, `set_updated_at`. Índice `(company_id, in_use, reference_year)` para as visões. Arquivar e lixeira continuam em `documents` (`archived_at`, `deleted_at`): não há estado duplicado.
+- **Backfill da 0012:** documentos (inclusive arquivados e na lixeira) cuja versão atual é `.xlsx`, `.xls`, `.csv` ou `.ods` ganham a ficha com o ano de criação do documento no fuso da empresa (limitado a 1990–2100). O `down` só remove a tabela: os documentos não mudam.

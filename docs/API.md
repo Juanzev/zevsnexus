@@ -108,8 +108,8 @@ Todas exigem `Authorization` + `X-Company-Id`. Leitura: `documents.view`. Escrit
 | Método e rota | Corpo / query | Sucesso e erros |
 |---|---|---|
 | `POST /files/upload-intents` (200/h por usuário) | `{ filename, size_bytes, content_type? }` | `201 { data: { file: { id, original_name, extension, content_type, size_bytes, status: "pending", expires_at }, upload: { url, method: "PUT", headers: { "Content-Type" }, expires_at } } }`. `422 FILE_TYPE_NOT_ALLOWED`, `FILE_TOO_LARGE` (limite do plano), `STORAGE_QUOTA_EXCEEDED` |
-| `POST /documents` (`Idempotency-Key`) | `{ file_id, folder_id?, title?, description?, document_type_id?, expires_on?, tags?: string[] }` (até 10 tags de 40 caracteres) | `201 { data: { document } }`. Sem título, vale o nome do arquivo. `422 FILE_NOT_FOUND`, `FILE_NOT_UPLOADED` (PUT ainda não terminou; o arquivo continua pendente), `FILE_REJECTED` (tamanho ou conteúdo não confere; `details[0].code`: `size_mismatch`, `signature_mismatch`, `changed_during_check`), `FILE_ALREADY_USED`, `FILE_EXPIRED`, `FOLDER_NOT_FOUND`, `DOCUMENT_TYPE_NOT_FOUND`, `STORAGE_QUOTA_EXCEEDED`. `503 STORAGE_UNAVAILABLE` |
-| `POST /documents/:id/versions` (`Idempotency-Key`) | `{ file_id, comment? }` | `201 { data: { document } }`. Mesmos erros de arquivo; `409 DOCUMENT_IN_TRASH` |
+| `POST /documents` (`Idempotency-Key`) | `{ file_id, folder_id?, title?, description?, document_type_id?, expires_on?, tags?: string[], reference_year? }` (até 10 tags de 40 caracteres; `reference_year` 1990–2100 só vale para planilha — ver F6) | `201 { data: { document } }`. Sem título, vale o nome do arquivo. `422 FILE_NOT_FOUND`, `FILE_NOT_UPLOADED` (PUT ainda não terminou; o arquivo continua pendente), `FILE_REJECTED` (tamanho ou conteúdo não confere; `details[0].code`: `size_mismatch`, `signature_mismatch`, `changed_during_check`), `FILE_ALREADY_USED`, `FILE_EXPIRED`, `FOLDER_NOT_FOUND`, `DOCUMENT_TYPE_NOT_FOUND`, `STORAGE_QUOTA_EXCEEDED`. `503 STORAGE_UNAVAILABLE` |
+| `POST /documents/:id/versions` (`Idempotency-Key`) | `{ file_id, comment?, reference_year? }` | `201 { data: { document } }`. Mesmos erros de arquivo; `409 DOCUMENT_IN_TRASH` |
 
 ### Documentos
 
@@ -214,6 +214,24 @@ Valores sempre em **centavos inteiros** (`amount_cents`); datas `AAAA-MM-DD` (ca
 ```
 
 `finance` só para quem tem `finance.view`; `documents` só com `documents.view`. Definições (FASE-0, D4): **a pagar vencido** = saldo em aberto das despesas não quitadas com vencimento antes de hoje; **vence em 7 dias** = o mesmo, de hoje a hoje + 7; **pago no período** = soma dos pagamentos não estornados com data no período (caixa); **despesas do período** = soma das despesas não canceladas com vencimento no período.
+
+## Planilhas (F6)
+
+Todas exigem `Authorization` + `X-Company-Id`. Leitura: `spreadsheets.view`. Escrita: `spreadsheets.manage`. A planilha é um documento: envio, versões, download, mover e lixeira continuam nas rotas de documentos (o `id` é o do documento).
+
+**Registro automático:** todo documento cuja versão enviada é `.xlsx`, `.xls`, `.csv` ou `.ods` ganha a ficha de planilha (`in_use: false`, `reference_year` = o enviado no `POST /documents` ou na nova versão — a tela manda o ano da data de modificação do arquivo — ou o ano corrente no fuso da empresa). Uma nova versão não muda a ficha já existente.
+
+| Método e rota | Corpo / query | Sucesso e erros |
+|---|---|---|
+| `GET /spreadsheets` | `?view=in_use\|this_year\|older\|archived\|all&q=&year=&sort=&page=&limit=` (padrão `view=in_use`, `sort=-updated_at`; `sort`: `updated_at`, `title`, `reference_year`, com `-` para decrescente) | `{ data: { spreadsheets: [...] }, meta: { page, limit, total, current_year, years: [2026, 2019] } }`. Visões: **em uso** = marcadas e não arquivadas; **deste ano** / **antigas** = ano de referência igual / anterior ao ano corrente (fuso da empresa), não arquivadas; **arquivadas**; **todas**. A lixeira nunca aparece |
+| `GET /spreadsheets/:id` | — | `{ data: { spreadsheet } }`. `404 SPREADSHEET_NOT_FOUND` (inclusive na lixeira ou de outra empresa) |
+| `PATCH /spreadsheets/:id` | `{ in_use?, reference_year? }` (pelo menos um) | `{ data: { spreadsheet } }` |
+| `POST /spreadsheets/bulk` | `{ ids: uuid[] (1–100), action: "mark_in_use" \| "unmark_in_use" \| "set_year" \| "archive" \| "unarchive", reference_year? }` (`set_year` exige o ano) | `{ data: { updated, not_found: [ids] } }`: o que não existir na empresa (ou estiver na lixeira) volta em `not_found` sem derrubar o resto |
+| `GET /spreadsheets/:id/preview` (600/h por usuário) | `?sheet=0..99&page=1..2000&version=` (padrão: 1ª aba, página 1, versão atual) | `{ data: { version_number, extension, sheets: [{ index, name, hidden }], sheet: { index, name, total_rows, columns, page, page_size: 50, rows: [{ number, cells: string[] }], truncated_rows, truncated_columns }, csv?: { encoding, delimiter } } }`. `404 SHEET_NOT_FOUND`, `404 VERSION_NOT_FOUND`; `422 PREVIEW_NOT_SUPPORTED` (`.xls`), `SPREADSHEET_TOO_LARGE` (> 10 MB ou além de um teto de leitura), `SPREADSHEET_UNREADABLE` (corrompido, protegido por senha ou com `DOCTYPE`); `503 STORAGE_UNAVAILABLE` |
+
+**Planilha:** `{ id, title, folder_id, in_use, reference_year, archived_at, current_version, file: { original_name, extension, size_bytes, previewable }, created_at, updated_at }`. `previewable` = não é `.xls` e tem até 10 MB.
+
+**Prévia:** somente leitura e só texto. Cada célula traz o texto formatado em pt-BR (datas `dd/mm/aaaa`, `R$`, `%`, `VERDADEIRO/FALSO`); fórmula traz o último valor salvo no arquivo (nunca é calculada). Linhas e colunas vazias no fim não contam; `rows` traz as linhas vazias do meio. Tetos: 100 abas, 100 mil linhas varridas (`truncated_rows`), 200 colunas (`truncated_columns`), 1.000 caracteres por célula (corte com `…`) e 5 s de leitura. A abertura (sem `sheet` e na página 1) grava `document.previewed`.
 
 ## Painel ZEVS (`/api/v1/admin`)
 
