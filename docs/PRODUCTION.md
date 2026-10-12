@@ -8,7 +8,7 @@
 
 - [ ] CI verde na `main` (lint, testes, migrations up → down → up, ensaio de produção, E2E).
 - [ ] Ensaio local OK: `cd backend && npm run prod:rehearsal` (≈ 30 verificações com `NODE_ENV=production`).
-- [ ] **Domínio (D13.2)** decidido. Sem domínio, a produção sobe em `https://<serviço>.onrender.com`, **mas o e-mail não funciona para o cliente** (ver §3): para o piloto, o domínio é na prática obrigatório.
+- [x] **Domínio (D13.2):** `zevsnexus.com.br` (Registro.br, DNS no Cloudflare). Sem domínio, a produção sobe em `https://<serviço>.onrender.com`, **mas o e-mail não funciona para o cliente** (ver §3): para o piloto, o domínio é na prática obrigatório.
 
 ## 1. Render (plano pago) e banco (Neon)
 
