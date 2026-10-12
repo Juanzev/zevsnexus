@@ -745,7 +745,7 @@ Todo o Core da pág. 06: checklist por funcionalidade em `docs/SECURITY.md`; Hel
 - **Exportação do titular** (prestador PF) com `data.export`, auditada.
 - **Anonimização irreversível** que preserva o histórico financeiro.
 - **Retenção:** lixeira com 30 dias (a confirmar) antes da exclusão física.
-- **Criptografia em repouso:** do provedor (R2 e Postgres do Render). Não há segredo de terceiro guardado no banco no MVP; se houver, AES-256-GCM com versão de chave (Core).
+- **Criptografia em repouso:** do provedor (R2 e Neon). Não há segredo de terceiro guardado no banco no MVP; se houver, AES-256-GCM com versão de chave (Core).
 
 ## 21. Auditoria
 
@@ -823,10 +823,11 @@ Nenhum fluxo crítico depende de job: "vencida" é calculada na consulta.
 
 ## 24. Infra, deploy, observabilidade e backup
 
-- **Render** (Virginia): web service + PostgreSQL, com blueprint `render.yaml`. Build com `npm ci` (o frontend com devDependencies, para o Tailwind; o backend com `--omit=dev`). `preDeployCommand` = migrations + seeds. Health check em `/ready`.
+- **Render** (Virginia): web service, com blueprint `render.yaml` (staging) e `render.production.yaml`. Build com `npm ci` (o frontend com devDependencies, para o Tailwind; o backend com `--omit=dev`). `preDeployCommand` = migrations + seeds. Health check em `/ready` no staging e em `/health` na produção, para o banco poder suspender.
+- **Neon** (AWS us-east-1): PostgreSQL de staging e de produção (D13.3), fora do Render. Conexão direta (sem pooler, por causa da trava de sessão das migrations) e SSL com verificação do certificado.
 - **Ambientes:**
   - *staging:* Render free + Postgres gratuito + bucket R2 de staging;
-  - *produção:* Render pago (web + Postgres) + bucket R2 de produção (D13).
+  - *produção:* Render pago (web) + Neon + bucket R2 de produção (D13 e D13.3).
 - **Cloudflare:** `CNAME` proxied; SSL Full (strict); Always Use HTTPS; Transform Rule com `X-Origin-Auth`; rate limit de borda em `/api/v1/auth/*`; Browser Cache TTL em "Respect Existing Headers".
 - **Variáveis:** as da base ZEVS (`NODE_ENV PORT LOG_LEVEL APP_URL DATABASE_URL DATABASE_SSL DATABASE_POOL_MAX JWT_SECRET JWT_EXPIRES_IN REFRESH_TOKEN_EXPIRES_IN FRONTEND_URL CORS_ORIGIN SERVE_FRONTEND CF_ORIGIN_SECRET ENCRYPTION_KEY RESEND_API_KEY PLATFORM_ADMIN_EMAILS JOBS_ENABLED`) + `STORAGE_PROVIDER R2_ACCOUNT_ID R2_ACCESS_KEY_ID R2_SECRET_ACCESS_KEY R2_BUCKET UPLOAD_URL_TTL_SECONDS DOWNLOAD_URL_TTL_SECONDS`.
 - **Observabilidade:** logs JSON pino com request id; eventos de segurança (acesso negado a tenant, reuso de refresh, upload rejeitado); uptime externo batendo em `/health` na origem.

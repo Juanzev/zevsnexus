@@ -34,7 +34,7 @@
 | Backend | Node.js 24 LTS (ESM), Express 5, PostgreSQL 16+ com `pg` (**sem ORM**), node-pg-migrate 9, Zod 4, jsonwebtoken + bcryptjs, helmet, cors, express-rate-limit, cookie-parser, pino |
 | Frontend | HTML + ES Modules **sem framework e sem bundler**, Tailwind v4 **compilado**, sprite Lucide gerado no build, Chart.js vendorizado |
 | Testes | Jest + Supertest, Playwright (E2E), ESLint 9 |
-| Infra | GitHub + Actions, Render (Virginia, serviço único API + SPA), Cloudflare, Cloudflare R2 (arquivos), Resend (e-mail) |
+| Infra | GitHub + Actions, Render (Virginia, serviço único API + SPA), Neon (PostgreSQL, AWS us-east-1; D13.3), Cloudflare, Cloudflare R2 (arquivos), Resend (e-mail) |
 
 API em `/api/v1`. Fora da versão: `/health`, `/ready`, `/api/version`.
 

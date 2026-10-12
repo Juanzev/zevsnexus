@@ -10,22 +10,24 @@
 - [ ] Ensaio local OK: `cd backend && npm run prod:rehearsal` (≈ 30 verificações com `NODE_ENV=production`).
 - [ ] **Domínio (D13.2)** decidido. Sem domínio, a produção sobe em `https://<serviço>.onrender.com`, **mas o e-mail não funciona para o cliente** (ver §3): para o piloto, o domínio é na prática obrigatório.
 
-## 1. Render (plano pago)
+## 1. Render (plano pago) e banco (Neon)
 
+0. **Banco (Neon, D13.3):** crie um projeto no Neon na região **AWS us-east-1 (N. Virginia)**, a mesma do Render, com Postgres 17. Copie a connection string **direta** (sem `-pooler` no endereço), com `sslmode=require`. As migrations usam trava de sessão, que o pooler do Neon não mantém. O plano gratuito suspende o banco depois de alguns minutos sem uso e tem cota mensal de computação. Por isso o health check do Render é o `/health`, que não toca no banco. Acompanhe o consumo no painel do Neon e passe para o plano pago quando houver uso real.
 1. *New → Blueprint* → repositório do Nexus → arquivo **`render.production.yaml`** (o `render.yaml` continua sendo o staging).
-2. Confira os planos sugeridos (web `starter`, Postgres `basic-256mb`, região Virginia) e ajuste aos nomes vigentes do painel, se mudaram.
+2. Confira o plano sugerido (web `starter`, região Virginia) e ajuste ao nome vigente do painel, se mudou. O blueprint não cria banco no Render.
 3. Preencha as variáveis `sync: false`:
 
    | Variável | Valor |
    |---|---|
    | `APP_URL` | `https://<domínio>` (ou a URL `*.onrender.com` até o domínio existir), sem barra no fim |
+   | `DATABASE_URL` | Connection string **direta** do Neon (passo 0) |
    | `CF_ORIGIN_SECRET` | Vazio até o Cloudflare (§4); depois, o mesmo valor da Transform Rule |
    | `RESEND_API_KEY` | Chave do Resend (§3) |
    | `EMAIL_FROM` | `ZEVS Nexus <no-reply@<domínio>>` |
    | `PLATFORM_ADMIN_EMAILS` | Seu e-mail (vale depois de verificado) |
    | `R2_ACCOUNT_ID` / `R2_ACCESS_KEY_ID` / `R2_SECRET_ACCESS_KEY` / `R2_BUCKET` | Token do app no bucket de produção (§2) |
 
-   `JWT_SECRET` é gerado pelo Render. `DATABASE_URL` vem do Postgres do blueprint (rede interna).
+   `JWT_SECRET` é gerado pelo Render. `DATABASE_SSL` já vem `true` (conexão pela internet, com verificação do certificado).
 4. Primeiro deploy: o `preDeployCommand` roda migrations e seed; se falharem, a versão não entra no ar.
 5. Conferir na origem: `/health` → `{"status":"ok"}`; `/ready` → `{"status":"ready"}`; `/api/version` → SHA do commit.
 
@@ -74,9 +76,9 @@ Nunca reaproveite token do staging nem dê ao app acesso ao bucket de backup.
 
 | Segredo do GitHub | Valor |
 |---|---|
-| `PROD_DATABASE_URL` | *External Database URL* do Postgres do Render, com `?sslmode=require` |
+| `PROD_DATABASE_URL` | Connection string **direta** do Neon, com `?sslmode=require` |
 
-O dump (`pg_dump -Fc`) fica como **artefato privado por 30 dias** (o repositório precisa ser privado). Além disso, o Render pago faz o backup gerenciado do banco.
+O dump (`pg_dump -Fc`) fica como **artefato privado por 30 dias** (o repositório precisa ser privado). O Neon também guarda um histórico curto para restauração (a janela depende do plano). Esse histórico não substitui o dump diário.
 
 **Arquivos (D12f)** — `.github/workflows/files-backup.yml` (diário, 03h de Manaus, e botão):
 
@@ -112,7 +114,7 @@ Meta (D12b): **RPO 24 h / RTO 8 h**.
 |---|---|---|---|---|
 | 2026-10-11 | Claude (ensaio do roteiro) | `pg_dump -Fc` do banco local de desenvolvimento | OK (0,1 min) | Ensaio do script e do roteiro. **Falta o restore de um backup de produção**, feito pelo Juan antes do piloto. |
 
-**Restore de verdade (incidente):** crie um Postgres novo no Render, `pg_restore --no-owner --no-privileges --dbname=<nova URL externa> <dump>`, aponte o `DATABASE_URL` do serviço para ele (Render → Environment), redeploy e confira `/ready`. Nunca restaure por cima do banco em uso sem antes guardar um dump dele.
+**Restore de verdade (incidente):** crie um banco novo no Neon (outro projeto ou um *branch* vazio), `pg_restore --no-owner --no-privileges --dbname=<URL direta nova> <dump>`, aponte o `DATABASE_URL` do serviço para ele (Render → Environment), redeploy e confira `/ready`. Nunca restaure por cima do banco em uso sem antes guardar um dump dele.
 
 ## 7. Monitoramento
 

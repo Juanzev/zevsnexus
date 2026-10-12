@@ -1,6 +1,7 @@
 // Endpoints de infraestrutura (pág. 08), fora de /api/v1:
 // - /health: liveness, não toca no banco, fora do rate limit;
-// - /ready: readiness (banco acessível e migrations em dia) — é o health check do Render;
+// - /ready: readiness (banco acessível e migrations em dia) — health check do staging e do E2E (na
+//   produção o Render usa /health, para o Neon poder suspender);
 // - /api/version: versão do deploy, base da estratégia de atualização (pág. 11).
 import { env } from './config/env.js';
 import { pool } from './shared/db.js';

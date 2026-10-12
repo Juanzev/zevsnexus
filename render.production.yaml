@@ -3,11 +3,15 @@
 # Ao criar o Blueprint no Render, aponte para este arquivo (o staging continua em render.yaml).
 #
 # Diferenças para o staging:
-# - plano pago (não hiberna) para o web service e para o Postgres (o free expira);
+# - plano pago (não hiberna) para o web service;
 # - migrations + seed no preDeployCommand: se falharem, o deploy não entra no ar;
 # - e-mail real (Resend) e arquivos no bucket R2 de produção.
 #
-# Confira no painel os nomes de plano vigentes do Render (web: starter; Postgres: ex. basic-256mb).
+# Banco: Neon (decisão do Juan, 11/10/2026, FASE-0 D13.3), fora do Render — por isso não há bloco
+# `databases` aqui. Use a conexão DIRETA do Neon (sem "-pooler" no endereço): as migrations usam trava
+# de sessão, que o pooler não mantém. Projeto no AWS us-east-1 (perto do Render Virginia).
+#
+# Confira no painel o nome de plano vigente do Render (web: starter).
 # Segredos: `sync: false` = preencher no painel do Render; nunca neste arquivo.
 services:
   - type: web
@@ -17,7 +21,9 @@ services:
     plan: starter
     branch: main
     autoDeploy: true
-    healthCheckPath: /ready
+    # /health não toca no banco: o Render confere a saúde o tempo todo e, com /ready, o Neon nunca
+    # dormiria (gastando a cota de computação). Migration com falha já barra o deploy no preDeployCommand.
+    healthCheckPath: /health
     # O frontend instala devDependencies (Tailwind): com NODE_ENV=production o npm pularia o build do CSS.
     buildCommand: >-
       cd frontend && npm ci --include=dev && npm run build &&
@@ -34,13 +40,12 @@ services:
       # URL pública (https), sem barra no fim: o domínio quando existir (D13.2); até lá, a *.onrender.com.
       - key: APP_URL
         sync: false
-      # Banco do próprio Render, pela rede interna (sem SSL nessa conexão).
+      # Connection string DIRETA do Neon (com sslmode=require), colada no painel. Nunca neste arquivo.
       - key: DATABASE_URL
-        fromDatabase:
-          name: zevs-nexus-db
-          property: connectionString
+        sync: false
+      # Conexão pela internet: SSL com verificação do certificado.
       - key: DATABASE_SSL
-        value: "false"
+        value: "true"
       - key: DATABASE_POOL_MAX
         value: "10"
       - key: JWT_SECRET
@@ -82,10 +87,3 @@ services:
       - key: R2_BUCKET
         sync: false
 
-databases:
-  - name: zevs-nexus-db
-    region: virginia
-    plan: basic-256mb
-    postgresMajorVersion: "17"
-    databaseName: zevs_nexus
-    user: zevs_nexus

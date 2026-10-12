@@ -1,7 +1,7 @@
 # Backup externo diário do banco de PRODUÇÃO (STRUCTURE pág. 19, ARCHITECTURE §24.1, D12b).
 # pg_dump -Fc → artefato PRIVADO do GitHub, retenção de 30 dias. Às 02h de Manaus (06h UTC) e por botão.
 # Segredo necessário (Settings → Secrets → Actions), cadastrado pelo Juan:
-#   PROD_DATABASE_URL  External Database URL do Postgres do Render, com ?sslmode=require
+#   PROD_DATABASE_URL  Connection string DIRETA do Neon (sem -pooler), com ?sslmode=require
 # Restaurar e conferir: npm run db:restore-check -- <arquivo.dump> (docs/PRODUCTION.md).
 name: Backup do banco
 
