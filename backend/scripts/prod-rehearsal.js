@@ -222,6 +222,8 @@ try {
   check(list.json?.meta?.totals?.amount_cents === 102_500, 'lista com totais', JSON.stringify(list.json?.meta?.totals));
   const dashboard = await owner.request('GET', '/api/v1/dashboard?period=this_year');
   check(dashboard.status === 200 && dashboard.json.data.finance, 'dashboard com o bloco financeiro');
+  const sheets = await owner.request('GET', '/api/v1/spreadsheets?view=all');
+  check(sheets.status === 200 && Number.isInteger(sheets.json.meta?.current_year), 'planilhas: lista e visões (0012)');
 
   const intent = await owner.request('POST', '/api/v1/files/upload-intents', {
     body: { filename: 'comprovante.pdf', size_bytes: 1234, content_type: 'application/pdf' },
