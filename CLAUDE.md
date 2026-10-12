@@ -12,7 +12,7 @@
 
 ## Estado atual
 
-- **F0 aprovada (09/10/2026) · F1 aprovada (10/10/2026) · F2 aprovada (11/10/2026) · F3 aprovada (11/10/2026) · F4 aprovada (11/10/2026) · F5 aprovada (11/10/2026; go-live depende do Juan: `docs/PRODUCTION.md`) · F6 aprovada (11/10/2026) · F7 em andamento.**
+- **F0 aprovada (09/10/2026) · F1 aprovada (10/10/2026) · F2 aprovada (11/10/2026) · F3 aprovada (11/10/2026) · F4 aprovada (11/10/2026) · F5 aprovada (11/10/2026; go-live depende do Juan: `docs/PRODUCTION.md`) · F6 aprovada (11/10/2026) · F7 concluída (11/10/2026), aguardando aprovação.**
 - **Plano:** F1 Fundação + Auth → F2 Tenant/RBAC/Empresa/Plataforma → F3 Armazenamento + Documentos → F4 Prestadores + Financeiro → F5 PWA + piloto → F6 Planilhas → F7 Notas → F8 Busca + dashboard → F9 Importação → F10 Equipe/LGPD/hardening → F11 Painel ZEVS completo.
 
 ## Fonte das regras
@@ -203,4 +203,6 @@ Responder por escrito em `docs/SECURITY.md` antes do merge:
 - **Planilhas:** a ficha (`spreadsheets`) nasce em `documents.service` (`registerSpreadsheet`), no envio e na nova versão; não crie planilha por outro caminho. A prévia passa sempre por `readers/index.js` (`readSpreadsheet`), com os tetos de `readers/limits.js`; leitor novo usa `openZip`/`parseXml` (zip com teto, XML sem `DOCTYPE`) e devolve só texto.
 - **Planilhas fantasma** (`fixtures/planilhas/`, geradas pelo Excel via COM): use `NumberFormatLocal` (o `NumberFormat` em inglês gera CSV local errado) e crie abas com `SheetsInNewWorkbook` (`Worksheets.Add` com `Missing` falha). O git não preserva a data de modificação: teste que dependa de `File.lastModified` monta o arquivo em memória.
 - **Testes do frontend (node:test):** módulo que importa `services/session.js` abre um `BroadcastChannel` e o Node não termina; no teste, apague `globalThis.BroadcastChannel` antes de importar (`await import(...)`).
+- **Notas fiscais:** mudança de ciclo ou de recebimento só pelas rotas de transição (`/issue`, `/cancel`, `/mark-paid`, `/unmark-paid`), nunca pelo `PATCH`. Motivo em texto livre (cancelar, desfazer recebimento, estornar) fica na tabela do domínio, não na auditoria.
+- **Arquivos pelo shell:** heredoc (`<<'EOF'`) com aspas simples no conteúdo falha com "unexpected EOF" na ferramenta de shell; para escrever arquivo, use o editor.
 - Vulnerabilidade transitiva sem correção em ferramenta de desenvolvimento: registrar em `docs/SECURITY.md` (riscos aceitos). Se houver versão corrigida do pacote intermediário, usar `overrides` (ex.: `@parcel/watcher` do Tailwind).

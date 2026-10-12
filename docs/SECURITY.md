@@ -245,3 +245,31 @@ Planilha é arquivo de terceiro e, portanto, suspeita: a prévia é **somente le
 |---|---|
 | Visão "Importadas" e importação de linhas para o Financeiro (`spreadsheets.import` + `finance.manage`, feature `spreadsheet_import`) | F9 |
 | Prévia de `.xls` legado (só se surgir leitor sem CVE) | — |
+
+## Fase 7 — Notas fiscais (11/10/2026)
+
+O Nexus **registra** notas emitidas em outro sistema: não emite, não integra com prefeitura ou Sefaz e não movimenta saldo. O XML é só armazenado (não é lido).
+
+### Checklist por funcionalidade
+
+| Funcionalidade | Quem executa | Tenant | Permissão | Dados visíveis | IDOR | Race condition | Transação | Audit log | Informação sensível |
+|---|---|---|---|---|---|---|---|---|---|
+| **Lista e detalhe** `GET /invoices`, `/invoices/:id`, `/history` | Membro | `tenantRouter` + `withTenant` | `invoices.view` | Notas emitidas da empresa, totais do filtro, anexos fora da lixeira | Nota alheia → 404 (suíte A × B); listas e busca de A não mostram B | Não | Leitura | — | Busca com curingas escapados; aba e ordenação por allowlist |
+| **Registrar e editar** `POST /invoices`, `PATCH /invoices/:id` | Quem gerencia notas | `withTenant` | `invoices.manage` | A nota | Tomador de outra empresa no corpo → 422 `PARTY_NOT_FOUND` | Edição com `version` (409); número único (índice parcial → 409 `INVOICE_NUMBER_TAKEN`, inclusive em dois registros simultâneos) | Sim (criar já emitida: nota, emissão e as duas auditorias juntas) | `invoice.created`, `invoice.updated` (descrição e observações como `[dado pessoal]`), `invoice.issued` | `Idempotency-Key` no `POST`; retenções entre 0 e o bruto (Zod + `CHECK`); líquido calculado pelo banco |
+| **Transições** `/issue`, `/cancel`, `/mark-paid`, `/unmark-paid`, `/archive`, `/unarchive` | Quem gerencia notas | `withTenant` | `invoices.manage` | A nota atualizada | Nota alheia → 404 e nada muda | **Sim:** `SELECT … FOR UPDATE` + `UPDATE` condicional ao estado; 3 "marcar paga" simultâneos → 1 passa; cancelar × receber ao mesmo tempo → nunca cancelada e paga (testado e garantido por `CHECK`) | Sim | `invoice.issued`/`cancelled`/`paid`/`unpaid`/`archived`/`unarchived` | Recebimento não pode ser no futuro (fuso da empresa). Os **motivos** (cancelar, desfazer recebimento) ficam na nota, não na auditoria: texto livre pode ter nome de pessoa |
+| **Anexos** `POST/DELETE /invoices/:id/documents` | Quem gerencia notas | `withTenant` | `invoices.manage` | PDF, XML, comprovante | Documento de outra empresa → 422 `DOCUMENT_NOT_FOUND`; nota alheia → 404 antes de tocar no arquivo | `ON CONFLICT DO NOTHING` | Sim | `invoice.document_linked`/`unlinked` | Arquivo novo passa pela conferência da F3 (extensão, MIME, magic bytes, cota) e vira documento na pasta "Notas fiscais"; o XML nunca é lido no servidor |
+| **Telas** `/app/notas`, `/app/notas/:id` | Navegador | O backend decide | Guardas só escondem (`invoices.view`; botões só com `invoices.manage` e no estado certo) | O que a API devolve | — | — | — | — | Tudo por `html```; nada calculado na tela (líquido, "vencida" e "finalizada" vêm da API) |
+
+### Controles da fase
+
+- **Três dimensões amarradas no banco** (0013): emitida tem número e data; paga ⇔ recebimento preenchido; paga só se emitida; cancelada tem motivo e autor; retenções entre 0 e o bruto. O serviço confere antes, e o banco garante mesmo se um caminho novo errar.
+- **Isolamento e permissões:** `tests/security/isolation-invoices.test.js` e `permissions-invoices.test.js` (5 papéis); concorrência em `tests/concurrency/invoices.test.js`.
+- **Ensaio de produção:** registra uma nota já emitida e o recebimento.
+
+### Pendências da F7
+
+| Item | Fase |
+|---|---|
+| Bloco de notas no Início (a receber, vencidas) e notas na busca global | F8 |
+| Leitura do XML para preencher a nota (parser sem DTD) | Depois de ver XMLs reais |
+| Notas recebidas na tela de Notas (`direction = 'received'`) | Só por decisão futura (D7.3) |

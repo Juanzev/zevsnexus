@@ -17,7 +17,7 @@ O primeiro cliente é uma empresa de engenharia civil, mas nenhum comportamento 
 | 4 | Prestadores + Financeiro | ✅ Aprovada (11/10/2026) |
 | 5 | PWA + mobile + produção paga → **piloto** | ✅ Aprovada (11/10/2026); go-live com o Juan (`docs/PRODUCTION.md`) |
 | 6 | Planilhas (níveis 1 e 2) | ✅ Aprovada (11/10/2026) |
-| 7 | Notas fiscais | 🚧 Em andamento |
+| 7 | Notas fiscais | ✅ Concluída (11/10/2026), aguardando aprovação |
 | 8 | Busca global + dashboard completo → **MVP completo** | ⏳ |
 | 9 | Importação estruturada de planilhas (nível 3) | ⏳ |
 | 10 | Equipe, LGPD, hardening | ⏳ |

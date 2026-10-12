@@ -233,6 +233,27 @@ Todas exigem `Authorization` + `X-Company-Id`. Leitura: `spreadsheets.view`. Esc
 
 **Prévia:** somente leitura e só texto. Cada célula traz o texto formatado em pt-BR (datas `dd/mm/aaaa`, `R$`, `%`, `VERDADEIRO/FALSO`); fórmula traz o último valor salvo no arquivo (nunca é calculada). Linhas e colunas vazias no fim não contam; `rows` traz as linhas vazias do meio. Tetos: 100 abas, 100 mil linhas varridas (`truncated_rows`), 200 colunas (`truncated_columns`), 1.000 caracteres por célula (corte com `…`) e 5 s de leitura. A abertura (sem `sheet` e na página 1) grava `document.previewed`.
 
+## Notas fiscais (F7)
+
+Todas exigem `Authorization` + `X-Company-Id`. Leitura: `invoices.view`. Escrita: `invoices.manage`. Só notas **emitidas** pela empresa (D7.3). Tipos: `nfse` (padrão), `nfe`, `other`.
+
+| Método e rota | Corpo / query | Sucesso e erros |
+|---|---|---|
+| `GET /invoices` | `?tab=pending\|processing\|paid\|issued\|cancelled\|archived\|all&q=&party_id=&kind=&issued_from=&issued_to=&sort=&page=&limit=` (padrão `tab=pending`; `sort`: `issue_date`, `due_date`, `net_amount`, `number`, `created_at`, com `-` para decrescente) | `{ data: { invoices: [...] }, meta: { page, limit, total, totals: { gross_cents, withheld_cents, net_cents }, today } }`. Abas: **pendentes** = emitida e não paga; **pagas** = recebimento registrado (finalizadas); **emitidas** = pendentes + pagas. Só **arquivadas** e **todas** mostram as arquivadas |
+| `POST /invoices` (`Idempotency-Key`) | `{ kind?, number?, series?, issue_date?, competence?: "AAAA-MM", party_id?, description, gross_amount_cents, withheld_cents?, due_date?, verification_code?, notes?, issue?: boolean }` | `201 { data: { invoice } }` em processamento; com `issue: true`, já emitida (exige número e data: `422 INVOICE_NUMBER_REQUIRED` / `INVOICE_DATE_REQUIRED`). `422 WITHHELD_ABOVE_GROSS`, `PARTY_NOT_FOUND`; `409 INVOICE_NUMBER_TAKEN` (mesmo tipo, série e número; a cancelada continua ocupando o número) |
+| `GET /invoices/:id` | — | `{ data: { invoice } }` com `documents[]`. `404 INVOICE_NOT_FOUND` |
+| `PATCH /invoices/:id` | `{ version, ...campos do POST (sem issue) }` | `{ data: { invoice } }`. `409 VERSION_CONFLICT`, `409 INVOICE_CANCELLED`; nota emitida não perde número nem data (`422`) |
+| `GET /invoices/:id/history` | — | `{ data: { events: [{ action, created_at, actor: { name }, details, changed_fields }] } }` |
+| `POST /invoices/:id/issue` | `{ number?, series?, issue_date? }` (vale o que já está na nota) | `{ data: { invoice } }`. `409 INVOICE_ALREADY_ISSUED`, `INVOICE_CANCELLED`; `422` sem número ou data |
+| `POST /invoices/:id/cancel` | `{ reason }` | `{ data: { invoice } }`. `409 INVOICE_PAID` (desfaça o recebimento antes), `INVOICE_CANCELLED` |
+| `POST /invoices/:id/mark-paid` | `{ received_on, received_amount_cents? }` (padrão: o líquido) | `{ data: { invoice } }`. `409 INVOICE_NOT_ISSUED`, `INVOICE_ALREADY_PAID`, `INVOICE_CANCELLED`; `422 RECEIPT_DATE_IN_FUTURE` |
+| `POST /invoices/:id/unmark-paid` | `{ reason }` | `{ data: { invoice } }` com `payment_undone_at` e `payment_undo_reason`. `409 INVOICE_NOT_PAID` |
+| `POST /invoices/:id/archive` · `/unarchive` | `{}` | `{ data: { invoice } }` (não muda o ciclo nem o recebimento) |
+| `POST /invoices/:id/documents` (`Idempotency-Key`) | `{ file_id \| document_id, role?: "pdf" \| "xml" \| "receipt" \| "other" }` | `201 { data: { invoice } }`. Arquivo novo vira documento na pasta "Notas fiscais". `422 DOCUMENT_NOT_FOUND` e os erros de arquivo da F3 |
+| `DELETE /invoices/:id/documents/:documentId` | — | `{ data: { invoice } }` (o documento continua na Central). `404 DOCUMENT_NOT_FOUND` |
+
+**Nota:** `{ id, kind, number, series, issue_date, competence: "AAAA-MM" | null, party: { id, name } | null, description, gross_amount_cents, withheld_cents, net_amount_cents, due_date, verification_code, notes, status: "processing" | "issued" | "cancelled", payment_status: "pending" | "paid", finalized, overdue, received_on, received_amount_cents, cancelled_at, cancel_reason, payment_undone_at, payment_undo_reason, archived_at, has_pdf, version, created_at, updated_at }`. `finalized` = emitida e paga; `overdue` = emitida, pendente, não arquivada e com vencimento antes de hoje (fuso da empresa). Os dois são calculados, nunca gravados.
+
 ## Painel ZEVS (`/api/v1/admin`)
 
 Exige ser Platform Admin; dono de empresa recebe `403 PLATFORM_ADMIN_REQUIRED`.

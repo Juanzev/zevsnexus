@@ -224,6 +224,16 @@ try {
   check(dashboard.status === 200 && dashboard.json.data.finance, 'dashboard com o bloco financeiro');
   const sheets = await owner.request('GET', '/api/v1/spreadsheets?view=all');
   check(sheets.status === 200 && Number.isInteger(sheets.json.meta?.current_year), 'planilhas: lista e visões (0012)');
+  const invoice = await owner.request('POST', '/api/v1/invoices', {
+    body: { description: 'Serviços de engenharia', gross_amount_cents: 100_000, issue: true, number: '1', issue_date: '2026-01-05' },
+    idempotent: true,
+  });
+  const invoiceId = invoice.json?.data?.invoice?.id;
+  const paidInvoice = await owner.request('POST', `/api/v1/invoices/${invoiceId}/mark-paid`, { body: { received_on: '2026-01-10' } });
+  check(
+    invoice.status === 201 && paidInvoice.json?.data?.invoice?.finalized === true,
+    'nota fiscal registrada já emitida e recebida (0013)',
+  );
 
   const intent = await owner.request('POST', '/api/v1/files/upload-intents', {
     body: { filename: 'comprovante.pdf', size_bytes: 1234, content_type: 'application/pdf' },

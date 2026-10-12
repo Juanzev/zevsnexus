@@ -25,6 +25,7 @@ PostgreSQL 16+ (CI em 17, local em 18), `pg` sem ORM e migrations com node-pg-mi
 | `0010_parties` | `parties`, `party_documents`; `company_settings.parties_folder_id` |
 | `0011_finance` | `finance_categories` (com as sugeridas para empresas existentes), `expenses`, `expense_payments` (trigger append-only), `expense_documents`, `expense_tags`; `company_settings.upcoming_window_days` |
 | `0012_spreadsheets` | `spreadsheets` (extensão 1:1 de `documents`: em uso e ano de referência), com a ficha criada para as planilhas já enviadas |
+| `0013_invoices` | `invoices` (ciclo, recebimento e arquivamento separados; líquido gerado; número único) e `invoice_documents` |
 
 **Seed do catálogo** (`npm run seed`, idempotente, roda em todo deploy): permissões, papéis com a matriz D10, features e planos, a partir de `src/modules/rbac/rbac.catalog.js` e `src/modules/plans/plans.catalog.js`. Nunca apaga permissão nem feature; sincroniza papel × permissão e plano × feature.
 
@@ -125,3 +126,10 @@ O cluster usa o provider de collation `builtin` (`C.UTF-8`, PostgreSQL 17+): `lo
 
 - **`spreadsheets`** — extensão 1:1 de `documents` (ARCHITECTURE §13.1.1): PK `(company_id, document_id)` e FK composta para `documents (company_id, id)` com `ON DELETE CASCADE` (a planilha nunca sobrevive ao documento). `in_use boolean`, `reference_year smallint` com `CHECK` 1990–2100, `updated_by`, `set_updated_at`. Índice `(company_id, in_use, reference_year)` para as visões. Arquivar e lixeira continuam em `documents` (`archived_at`, `deleted_at`): não há estado duplicado.
 - **Backfill da 0012:** documentos (inclusive arquivados e na lixeira) cuja versão atual é `.xlsx`, `.xls`, `.csv` ou `.ods` ganham a ficha com o ano de criação do documento no fuso da empresa (limitado a 1990–2100). O `down` só remove a tabela: os documentos não mudam.
+
+## Tabelas da F7 (destaques)
+
+- **`invoices`** — só `direction = 'issued'` é usado no MVP (`received` reservado). `kind` (`nfse`, `nfe`, `other`); `number` e `series` em texto; `competence` é um `date` sempre no dia 1; `party_id` (tomador) com FK composta; `net_amount_cents` **gerado** (bruto − retenções); `search_text` gerado (número, descrição e observações) com trigram; `version`.
+  - `CHECK`s: retenções entre 0 e o bruto; emitida ⇒ número e data; cancelada ⇔ `cancelled_at`, com motivo e autor; paga ⇔ `received_on` e `received_amount_cents`; **paga ⇒ emitida**; "desfazer recebimento" com data, autor e motivo juntos.
+  - Índices: número único `(company_id, kind, COALESCE(series, ''), number)` só nas emitidas pela empresa e com número (a cancelada continua ocupando); `(company_id, status, payment_status, issue_date DESC)` para as abas; tomador; vencimento das pendentes; GIN da busca.
+- **`invoice_documents`** — vínculo nota × documento com `role` (`pdf`, `xml`, `receipt`, `other`), FKs compostas e índice por documento.
