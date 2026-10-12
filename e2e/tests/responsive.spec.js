@@ -16,6 +16,7 @@ const APP_ROUTES = [
   '/app/financeiro?aba=paid',
   '/app/prestadores',
   '/app/planilhas?aba=todas',
+  '/app/notas?aba=all',
 ];
 
 /** Controles clicáveis visíveis com menos de 44 px de altura (pág. 10: alvo de toque mínimo). */
@@ -78,6 +79,7 @@ for (const width of WIDTHS) {
         `/app/prestadores/${ids.partyId}`,
         `/app/documentos/${ids.documentId}`,
         `/app/planilhas/${ids.spreadsheetId}`,
+        `/app/notas/${ids.invoiceId}`,
       ],
       { checkTargets: width < 1024 },
     );

@@ -97,6 +97,44 @@ export async function seedCompanyData({ token, companyId }) {
   const sheetPut = await api.put(new URL(sheetIntent.upload.url).pathname, { headers: sheetIntent.upload.headers, data: xlsx });
   if (!sheetPut.ok()) throw new Error(`PUT ${sheetPut.status()}`);
   const { document: spreadsheet } = await post('/documents', { file_id: sheetIntent.file.id, reference_year: 2026 });
+
+  // Nota emitida com textos longos (tomador, descrição e chave de 44 dígitos).
+  const { party: customer } = await post('/parties', {
+    person_type: 'company',
+    name: 'Associação dos Proprietários do Condomínio Residencial Vasconcellos Jardins',
+    roles: ['customer'],
+  });
+  const { invoice } = await post('/invoices', {
+    issue: true,
+    kind: 'nfe',
+    number: '000012345',
+    series: '001',
+    issue_date: '2026-10-01',
+    party_id: customer.id,
+    description: 'Prestação de serviços de engenharia civil: acompanhamento técnico, medições mensais e relatórios fotográficos da obra residencial',
+    gross_amount_cents: 4_567_890_12,
+    withheld_cents: 456_789_01,
+    verification_code: '35261012345678000199550010000123451234567890',
+  });
   await api.dispose();
-  return { partyId: party.id, expenseId: expense.id, documentId: document.id, spreadsheetId: spreadsheet.id };
+  return {
+    partyId: party.id,
+    expenseId: expense.id,
+    documentId: document.id,
+    spreadsheetId: spreadsheet.id,
+    invoiceId: invoice.id,
+  };
+}
+
+/** Cliente (tomador das notas) cadastrado pela API. */
+export async function createCustomer({ token, companyId }, name) {
+  const api = await client();
+  const res = await api.post('/api/v1/parties', {
+    headers: { Authorization: `Bearer ${token}`, 'X-Company-Id': companyId, 'Idempotency-Key': randomUUID() },
+    data: { person_type: 'company', name, roles: ['customer'] },
+  });
+  if (!res.ok()) throw new Error(`/parties ${res.status()}: ${await res.text()}`);
+  const { party } = (await res.json()).data;
+  await api.dispose();
+  return party;
 }
