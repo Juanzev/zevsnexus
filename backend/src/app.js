@@ -28,6 +28,7 @@ import {
   createFinanceCategoriesRouter,
 } from './modules/finance/finance.routes.js';
 import { createPartiesRouter } from './modules/parties/parties.routes.js';
+import { createInvoicesRouter } from './modules/invoices/invoices.routes.js';
 import { createSpreadsheetsRouter } from './modules/spreadsheets/spreadsheets.routes.js';
 import { createPlatformRouter } from './modules/platform/platform.routes.js';
 import { createDevStorageRouter } from './modules/storage/dev-storage.routes.js';
@@ -111,6 +112,7 @@ export function createApp({
   app.use('/api/v1/expense-payments', createExpensePaymentsRouter());
   app.use('/api/v1/finance-categories', createFinanceCategoriesRouter());
   app.use('/api/v1/spreadsheets', createSpreadsheetsRouter({ limiters }));
+  app.use('/api/v1/invoices', createInvoicesRouter());
   app.use('/api/v1/dashboard', createDashboardRouter());
   app.use('/api/v1/admin', createPlatformRouter());
   app.use('/api', apiNotFound);
