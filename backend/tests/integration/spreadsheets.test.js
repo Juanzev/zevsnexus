@@ -145,6 +145,11 @@ describe('metadados', () => {
     // Sem mudança: sem auditoria nova.
     await send(tenant, 'patch', `/spreadsheets/${doc.id}`, { in_use: true });
     expect(await auditEvents({ companyId: tenant.company.id, action: 'spreadsheet.updated', entityId: doc.id })).toHaveLength(1);
+
+    // O histórico do documento mostra os eventos da planilha (só campos, sem valor pessoal).
+    const history = (await get(tenant, `/documents/${doc.id}/history`)).body.data.events;
+    expect(history.find((event) => event.action === 'spreadsheet.updated').changed_fields).toEqual(['in_use', 'reference_year']);
+    expect(history.find((event) => event.action === 'spreadsheet.registered').details).toEqual({ extension: 'csv', reference_year: 2025 });
   });
 
   test('corpo vazio, campo desconhecido e ano inválido → 422', async () => {

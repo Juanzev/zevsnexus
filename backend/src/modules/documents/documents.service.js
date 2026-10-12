@@ -18,7 +18,7 @@ const HISTORY_LIMIT = 100;
 const EDITABLE_FIELDS = ['title', 'description', 'document_type_id', 'expires_on'];
 const PERSONAL_FIELDS = ['title', 'description'];
 // O que o histórico da tela mostra do metadata da auditoria (nada de valor pessoal).
-const HISTORY_DETAILS = ['version_number', 'from_version', 'disposition', 'extension', 'size_bytes'];
+const HISTORY_DETAILS = ['version_number', 'from_version', 'disposition', 'extension', 'size_bytes', 'reference_year'];
 
 function documentNotFound() {
   return new NotFoundError('DOCUMENT_NOT_FOUND', 'Documento não encontrado.');

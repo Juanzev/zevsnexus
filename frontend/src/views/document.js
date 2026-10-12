@@ -20,6 +20,8 @@ const FIELD_LABELS = {
   document_type_id: 'tipo',
   expires_on: 'validade',
   tags: 'tags',
+  in_use: 'em uso',
+  reference_year: 'ano de referência',
 };
 
 /** Frase do histórico a partir da ação auditada (sem dado pessoal: só o que mudou). */
@@ -48,6 +50,14 @@ function historyText(event) {
       return 'Moveu para a lixeira';
     case 'document.restored':
       return 'Restaurou da lixeira';
+    case 'document.previewed':
+      return `Viu a prévia da versão ${details.version_number}`;
+    case 'spreadsheet.registered':
+      return `Entrou em Planilhas (ano ${details.reference_year})`;
+    case 'spreadsheet.updated': {
+      const fields = event.changed_fields.map((name) => FIELD_LABELS[name] ?? name);
+      return `Alterou ${fields.join(', ')} da planilha`;
+    }
     default:
       return event.action;
   }
