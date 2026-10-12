@@ -24,8 +24,8 @@ function verifyEmailFirst() {
   return html`<div class="text-center">
     <span class="mx-auto mb-4 grid size-12 place-items-center rounded-full bg-primary/10 text-primary">${icon('mail', 'size-6')}</span>
     <h1 class="title">Confirme seu e-mail</h1>
-    <p class="subtitle">Para cadastrar a empresa, abra o link que enviamos para
-      <strong class="break-all text-slate-900">${getUser().email}</strong>.</p>
+    <p class="subtitle">Para cadastrar a empresa, abra o link de confirmação que enviamos para:</p>
+    <p class="mt-2 rounded-lg bg-slate-100 px-3 py-2 text-sm font-semibold break-all text-slate-900" data-email>${getUser().email}</p>
     <div class="mt-6 grid gap-2">
       <button type="button" class="btn btn-primary" data-action="checked">Já confirmei</button>
       <button type="button" class="btn btn-secondary" data-action="resend">Reenviar e-mail</button>
