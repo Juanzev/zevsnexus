@@ -546,7 +546,7 @@ StorageProvider
 
 - **Escopo MVP:** notas **emitidas** pela empresa (`direction = 'issued'`). Nota **recebida** de fornecedor entra como documento vinculado à despesa.
 - **Três dimensões:** `status` (`processing` → `issued` → `cancelled`), `payment_status` (`pending` → `paid`) e `archived_at`.
-- **Visões:** Em processamento · Emitidas · Pendentes · Pagas · Finalizadas (emitida e paga, calculada) · Canceladas · Arquivadas.
+- **Visões:** Em processamento · Pendentes · Pagas · Emitidas · Canceladas · Arquivadas · Todas. "Finalizada" (emitida e paga) é o selo da nota paga: como só nota emitida pode ser paga, a aba "Finalizadas" seria igual a "Pagas" (revisão da D7.2 na F7).
 - **Transições:**
 
   | De | Ação | Para | Exige |
@@ -561,6 +561,24 @@ StorageProvider
 - **Anexos:** PDF, XML e comprovante como documentos vinculados (`invoice_documents`), gravados na pasta padrão de notas.
 - **XML:** só armazenado no MVP. A leitura automática (futura) usa parser sem DTD e sem entidades externas.
 - **Sem integração fiscal.** `FiscalProvider` (ADR-014) só entra por decisão explícita.
+
+### 14.1 Como fica na implementação (F7)
+
+- **Tipos** (D7.4): `nfse` (NFS-e, padrão do formulário), `nfe` (NF-e) e `other`. Valem para qualquer empresa.
+- **`invoices`** (migration 0013):
+  - `direction` (`issued`, o único exposto; `received` reservado), `kind`, `number` e `series` (texto, como estão na nota), `issue_date`, `competence` (mês de competência, gravado como o dia 1), `party_id` (tomador, FK composta para `parties`, opcional), `description`, `gross_amount_cents`, `withheld_cents` (retenções, total), `net_amount_cents` (coluna gerada: bruto − retenções), `due_date`, `verification_code` (código de verificação ou chave de acesso), `notes`, `version`.
+  - `status` (`processing`, `issued`, `cancelled`) com `cancelled_at`/`cancelled_by`/`cancel_reason`; `payment_status` (`pending`, `paid`) com `received_on` e `received_amount_cents`; `archived_at`.
+  - `CHECK`s que amarram as dimensões: emitida tem número e data; paga ⇔ recebimento preenchido; **paga só se emitida** (cancelada nunca está paga); cancelada tem motivo e autor; retenções entre 0 e o bruto.
+  - Número único por empresa, tipo, série e número, só nas emitidas pela empresa (índice parcial). Nota cancelada continua ocupando o número.
+- **`invoice_documents`:** vínculo nota × documento com `role` (`pdf`, `xml`, `receipt`, `other`); arquivo novo vira documento na pasta padrão "Notas fiscais".
+- **Criar já emitida:** o caso comum é registrar a nota que já saiu na prefeitura ou na Sefaz. `POST /invoices` aceita `issue: true` (exige número e data): cria e emite na mesma transação, com as duas auditorias.
+- **Transições** são rotas próprias (`/issue`, `/cancel`, `/mark-paid`, `/unmark-paid`, `/archive`, `/unarchive`): cada uma trava a nota (`FOR UPDATE`), confere o estado e grava a auditoria. Recebimento não pode ser no futuro (fuso da empresa); o valor recebido, se omitido, é o líquido. Desfazer o pagamento limpa a data e o valor, e o motivo fica na auditoria.
+- **Edição** (`PATCH`, com `version`): todos os campos, menos em nota cancelada. Nota emitida não perde número nem data.
+- **"Vencida":** calculada (emitida, pendente e vencimento antes de hoje, no fuso da empresa), nunca gravada.
+- **Lista:** abas acima, busca (número, descrição, observações e tomador), tomador, período de emissão, ordenação por allowlist e totais do filtro (bruto, retenções e líquido).
+- **Auditoria:** `invoice.created`, `invoice.updated`, `invoice.issued`, `invoice.cancelled`, `invoice.paid`, `invoice.unpaid`, `invoice.archived`, `invoice.unarchived`, `invoice.document_linked`, `invoice.document_unlinked`. Descrição e observações viram `[dado pessoal]`.
+- **Telas:** `/app/notas` e `/app/notas/:id`. Na barra inferior do celular, Notas entra no lugar de Prestadores, que vai para o "Mais" (Início · Financeiro · Documentos · Notas · Mais).
+- **Fora da F7:** bloco de notas no Início e busca global (F8); leitura do XML.
 
 ## 15. Busca global
 
