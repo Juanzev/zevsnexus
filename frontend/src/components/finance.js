@@ -121,20 +121,28 @@ function partyLabel(party) {
 }
 
 /** Prestador por nome (autocompletar nativo do navegador, com busca no servidor). */
-export function partyPickerField({ name = 'party_id', label = 'Prestador ou fornecedor', party }) {
+export function partyPickerField({
+  name = 'party_id',
+  label = 'Prestador ou fornecedor',
+  party,
+  hint = 'Deixe em branco para despesas sem prestador (ex.: tarifa bancária).',
+}) {
   const id = `f-${name}`;
   return html`<div class="field">
     <label for="${id}" class="label">${label}</label>
     <input id="${id}" name="${name}" type="search" class="input" list="${id}-options" autocomplete="off"
       placeholder="Digite para buscar (opcional)" value="${party ? party.name : ''}" aria-describedby="${id}-hint ${id}-error">
     <datalist id="${id}-options"></datalist>
-    <p id="${id}-hint" class="hint">Deixe em branco para despesas sem prestador (ex.: tarifa bancária).</p>
+    <p id="${id}-hint" class="hint">${hint}</p>
     <p id="${id}-error" class="field-error" hidden></p>
   </div>`;
 }
 
-/** Liga o seletor: devolve value() → id, null (vazio) ou undefined (texto que não é da lista). */
-export function bindPartyPicker(root, { name = 'party_id', party } = {}) {
+/**
+ * Liga o seletor: devolve value() → id, null (vazio) ou undefined (texto que não é da lista).
+ * `role` limita as sugestões a um papel (ex.: 'customer' para o tomador da nota).
+ */
+export function bindPartyPicker(root, { name = 'party_id', party, role } = {}) {
   const input = root.querySelector(`[name="${name}"]`);
   const options = root.querySelector(`#f-${name}-options`);
   const byLabel = new Map();
@@ -145,6 +153,7 @@ export function bindPartyPicker(root, { name = 'party_id', party } = {}) {
     try {
       const params = new URLSearchParams({ limit: '20', sort: 'name' });
       if (query) params.set('q', query);
+      if (role) params.set('role', role);
       const { data } = await api(`/parties?${params}`);
       options.replaceChildren(
         ...data.parties.map((item) => {
@@ -357,14 +366,14 @@ export function openReasonForm({ title, message, submitLabel, onSubmit }) {
   });
 }
 
-/** Anexar arquivo a uma despesa ou à ficha de um prestador. */
-export function openAttachForm({ title = 'Anexar documento', withRole = false, onSubmit }) {
+/** Anexar arquivo a uma despesa, a uma nota ou à ficha de um prestador. */
+export function openAttachForm({ title = 'Anexar documento', withRole = false, roles = ATTACHMENT_ROLES, role = 'boleto', onSubmit }) {
   return openFormModal({
     title,
     submitLabel: 'Anexar',
     busyLabel: 'Enviando…',
     body: html`
-      ${withRole ? selectField({ name: 'role', label: 'O que é', options: ATTACHMENT_ROLES, value: 'boleto' }) : ''}
+      ${withRole ? selectField({ name: 'role', label: 'O que é', options: roles, value: role }) : ''}
       ${fileField({ name: 'file_id', label: 'Arquivo', hint: 'PDF, imagem, planilha ou documento de texto.' })}`,
     onMount: bindCameraButtons,
     onSubmit: async (form) => {

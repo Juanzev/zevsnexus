@@ -41,17 +41,18 @@ describe('prévia', () => {
 });
 
 describe('navegação', () => {
-  test('Planilhas fica na sidebar depois de Documentos e, no celular, no "Mais"', () => {
+  test('barra inferior Início · Financeiro · Documentos · Notas; Planilhas e Prestadores no "Mais"', () => {
     const paths = NAV_ITEMS.map((item) => item.path);
-    assert.equal(paths.indexOf('/app/planilhas'), paths.indexOf('/app/documentos') + 1);
+    assert.equal(paths.indexOf('/app/notas'), paths.indexOf('/app/documentos') + 1);
+    assert.equal(paths.indexOf('/app/planilhas'), paths.indexOf('/app/notas') + 1);
     const { shortcuts, more } = splitNavItems(NAV_ITEMS);
     assert.deepEqual(
       shortcuts.map((item) => item.path),
-      ['/app', '/app/financeiro', '/app/documentos', '/app/prestadores'],
+      ['/app', '/app/financeiro', '/app/documentos', '/app/notas'],
     );
     assert.deepEqual(
       more.map((item) => item.path),
-      ['/app/planilhas', '/app/empresa', '/app/configuracoes'],
+      ['/app/planilhas', '/app/prestadores', '/app/empresa', '/app/configuracoes'],
     );
   });
 
@@ -60,11 +61,11 @@ describe('navegação', () => {
     const { shortcuts, more } = splitNavItems(items);
     assert.deepEqual(
       shortcuts.map((item) => item.path),
-      ['/app', '/app/documentos', '/app/prestadores', '/app/empresa'],
+      ['/app', '/app/documentos', '/app/notas', '/app/prestadores'],
     );
     assert.deepEqual(
       more.map((item) => item.path),
-      ['/app/planilhas', '/app/configuracoes'],
+      ['/app/planilhas', '/app/empresa', '/app/configuracoes'],
     );
   });
 });

@@ -10,6 +10,7 @@ export const NAV_ITEMS = Object.freeze([
   { path: '/app', label: 'Início', icon: () => icon('house'), permission: 'dashboard.view' },
   { path: '/app/financeiro', label: 'Financeiro', icon: () => icon('wallet'), permission: 'finance.view' },
   { path: '/app/documentos', label: 'Documentos', icon: () => icon('folder-open'), permission: 'documents.view' },
+  { path: '/app/notas', label: 'Notas fiscais', short: 'Notas', icon: () => icon('receipt'), permission: 'invoices.view' },
   { path: '/app/planilhas', label: 'Planilhas', icon: () => icon('sheet'), permission: 'spreadsheets.view', bar: false },
   { path: '/app/prestadores', label: 'Prestadores', icon: () => icon('users'), permission: 'parties.view' },
   { path: '/app/empresa', label: 'Empresa', icon: () => icon('building-2'), permission: 'company.view' },
