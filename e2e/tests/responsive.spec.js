@@ -15,6 +15,7 @@ const APP_ROUTES = [
   '/app/financeiro',
   '/app/financeiro?aba=paid',
   '/app/prestadores',
+  '/app/planilhas?aba=todas',
 ];
 
 /** Controles clicáveis visíveis com menos de 44 px de altura (pág. 10: alvo de toque mínimo). */
@@ -71,7 +72,13 @@ for (const width of WIDTHS) {
     await expect(page.locator('h1')).toBeVisible();
     await visitAll(
       page,
-      [...APP_ROUTES, `/app/financeiro/${ids.expenseId}`, `/app/prestadores/${ids.partyId}`, `/app/documentos/${ids.documentId}`],
+      [
+        ...APP_ROUTES,
+        `/app/financeiro/${ids.expenseId}`,
+        `/app/prestadores/${ids.partyId}`,
+        `/app/documentos/${ids.documentId}`,
+        `/app/planilhas/${ids.spreadsheetId}`,
+      ],
       { checkTargets: width < 1024 },
     );
     // Barra inferior só no celular; sidebar só no desktop.

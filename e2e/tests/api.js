@@ -1,11 +1,15 @@
 // Preparação rápida pela API (sem clicar): contas verificadas, empresa aprovada.
 // Os fluxos que importam para o usuário continuam sendo testados pela tela nos *.spec.js.
 import { randomUUID } from 'node:crypto';
+import { readFileSync } from 'node:fs';
+import path from 'node:path';
+import { fileURLToPath } from 'node:url';
 import { request as playwrightRequest } from '@playwright/test';
 import { PASSWORD, readEmail, uniqueEmail } from './helpers.js';
 
 export const ADMIN_EMAIL = 'admin-zevs@exemplo.local';
 const BASE_URL = `http://localhost:${process.env.E2E_PORT ?? '3100'}`;
+export const fixturesDir = path.resolve(path.dirname(fileURLToPath(import.meta.url)), '../../fixtures/planilhas');
 
 async function client() {
   return playwrightRequest.newContext({ baseURL: BASE_URL });
@@ -86,6 +90,13 @@ export async function seedCompanyData({ token, companyId }) {
   const put = await api.put(new URL(intent.upload.url).pathname, { headers: intent.upload.headers, data: pdf });
   if (!put.ok()) throw new Error(`PUT ${put.status()}`);
   const { document } = await post('/documents', { file_id: intent.file.id, tags: ['Contratos'], expires_on: '2026-10-20' });
+
+  // Planilha fantasma (fixtures/planilhas): 11 colunas e 125 linhas para a prévia não rolar a página.
+  const xlsx = readFileSync(path.join(fixturesDir, 'Controle de pagamentos 2026.xlsx'));
+  const sheetIntent = await post('/files/upload-intents', { filename: 'Controle de pagamentos 2026.xlsx', size_bytes: xlsx.length });
+  const sheetPut = await api.put(new URL(sheetIntent.upload.url).pathname, { headers: sheetIntent.upload.headers, data: xlsx });
+  if (!sheetPut.ok()) throw new Error(`PUT ${sheetPut.status()}`);
+  const { document: spreadsheet } = await post('/documents', { file_id: sheetIntent.file.id, reference_year: 2026 });
   await api.dispose();
-  return { partyId: party.id, expenseId: expense.id, documentId: document.id };
+  return { partyId: party.id, expenseId: expense.id, documentId: document.id, spreadsheetId: spreadsheet.id };
 }
